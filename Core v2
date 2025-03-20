@@ -1,0 +1,255 @@
+import asyncio
+import hashlib
+import json
+import logging
+import os
+import sqlite3
+import threading
+import time
+import uuid
+
+import aiosqlite
+import httpx
+import psutil
+from dotenv import load_dotenv
+from flask import Flask, jsonify, request, Response
+from prometheus_client import (
+    CONTENT_TYPE_LATEST,
+    Gauge,
+    Histogram,
+    generate_latest,
+    Counter,
+)
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+# Prometheus metrics
+database_health_check_duration = Histogram(
+    "database_health_check_duration_seconds", "Database health check duration"
+)
+database_error_counter = Counter("database_error_count", "Number of database errors")
+rule_violation_counter = Counter("rule_violation_count", "Number of rule violations")
+
+# Additional Prometheus metrics
+cpu_usage_gauge = Gauge("cpu_usage_percent", "CPU usage percentage")
+memory_usage_gauge = Gauge("memory_usage_percent", "Memory usage percentage")
+disk_usage_gauge = Gauge("disk_usage_percent", "Disk usage percentage")
+network_bytes_sent_gauge = Gauge("network_bytes_sent", "Network bytes sent")
+network_bytes_received_gauge = Gauge(
+    "network_bytes_received", "Network bytes received"
+)
+
+# API request size histogram
+api_request_size_histogram = Histogram(
+    "api_request_size_bytes", "API request size in bytes"
+)
+
+# API response size histogram
+api_response_size_histogram = Histogram(
+    "api_response_size_bytes", "API response size in bytes"
+)
+
+
+class Settings(BaseSettings):
+    authorization_api_url: str = "http://localhost:8080/auth"
+    authorization_api_token: str = "your_token"
+    model_name: str = "t5-small"
+    model_cache_dir: str = "./model_cache"
+    model_checksum: str = "example_checksum"
+    summary_model: str = "facebook/bart-large"
+    log_file: str = "app.log"
+    law_summary_db_path: str = "law_summary.db"
+    database_update_url: str = "http://localhost:8081/laws"
+    database_update_token: str = "database_token"
+    alertmanager_url: str = None
+    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
+
+
+class PrimaryDirectives:
+    def __init__(self):
+        load_dotenv()
+        self.config = Settings()
+        self.app = Flask(__name__)
+        self._setup_logging()
+        self._build_law_summary_database()
+        self._load_models()
+        self._setup_flask_routes()
+        self._start_metrics_updater()
+
+    def _setup_logging(self):
+        logging.basicConfig(
+            level=logging.INFO,
+            format="%(asctime)s - %(levelname)s - %(message)s",
+            filename=self.config.log_file,
+        )
+
+    async def _build_law_summary_database(self):
+        if os.path.exists(self.config.law_summary_db_path):
+            return
+
+        try:
+            async with aiosqlite.connect(self.config.law_summary_db_path) as db:
+                await db.execute(
+                    """CREATE TABLE IF NOT EXISTS laws (
+                                law_id INTEGER PRIMARY KEY,
+                                summary TEXT
+                            )"""
+                )
+                await db.commit()
+            logging.info("Law summary database created.")
+        except aiosqlite.Error as e:
+            logging.critical(f"Database creation error: {e}")
+            raise
+def _load_models(self):
+        try:
+            logging.info(f"Loading model: {self.config.model_name}")
+            self._verify_model_integrity()
+            logging.info("Model loaded successfully.")
+        except Exception as e:
+            logging.critical(f"Model loading error: {e}")
+            raise
+
+    def _verify_model_integrity(self):
+        try:
+            model_path = os.path.join(
+                self.config.model_cache_dir, self.config.model_name
+            )
+            with open(model_path, "rb") as f:
+                calculated_checksum = hashlib.sha256(f.read()).hexdigest()
+
+            if calculated_checksum != self.config.model_checksum:
+                logging.error(
+                    f"Model checksum mismatch. Expected: {self.config.model_checksum}, Calculated: {calculated_checksum}"
+                )
+                raise ValueError("Model checksum mismatch.")
+
+            logging.info("Model integrity verified.")
+
+        except (FileNotFoundError, OSError, ValueError) as e:
+            logging.critical(f"Model integrity check failed: {e}")
+            self._send_alertmanager(
+                f"Model integrity check failed: {e}",
+                severity="critical",
+                grouping_key="model_integrity",
+            )
+            raise
+        except Exception as e:
+            logging.exception("Unexpected error during model integrity check:")
+            self._send_alertmanager(
+                "Unexpected error during model integrity check.",
+                severity="critical",
+                grouping_key="model_integrity",
+            )
+            raise
+
+    def _setup_flask_routes(self):
+        @self.app.route("/v1/health", methods=["GET"])
+        def health_check():
+            try:
+                asyncio.run(self._check_database_health())
+                return jsonify({"status": "ok"}), 200
+            except Exception as e:
+                logging.error(f"Database health check failed: {e}")
+                return jsonify({"status": "error", "message": "database error"}), 500
+
+        @self.app.route("/v1/process", methods=["POST"])
+        def process():
+            request_id = str(uuid.uuid4())
+            logging.info(f"Request ID: {request_id}, Method: POST, Path: /v1/process")
+            try:
+                data = request.get_json()
+                api_request_size_histogram.observe(len(request.data))
+
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+                results = loop.run_until_complete(self._process_request(data))
+                loop.close()
+
+                api_response_size_histogram.observe(
+                    len(json.dumps(results).encode("utf-8"))
+                )
+
+                return jsonify(results), 200
+            except Exception as e:
+                logging.error(f"Request ID: {request_id}, Error processing request: {e}")
+                return jsonify({"error": "Internal server error"}), 500
+
+        @self.app.route("/metrics")
+        def metrics():
+            return Response(generate_latest(), mimetype=CONTENT_TYPE_LATEST)
+
+    async def _check_database_health(self):
+        try:
+            with database_health_check_duration.time():
+                async with aiosqlite.connect(self.config.law_summary_db_path) as db:
+                    await db.execute("SELECT 1")
+                    await db.commit()
+        except aiosqlite.Error as e:
+            database_error_counter.inc()
+            logging.error(f"Database health check failed: {e}")
+            raise
+
+    def _apply_rules(self, context):
+        results = {}
+        results["harm_humanity"] = context.get("harm_humanity", False)
+        results["harm_individual"] = context.get("harm_individual", False)
+        results["obey_order"] = context.get("obey_order", False)
+        results["protect_self"] = context.get("protect_self", False)
+        results["follow_legal"] = context.get("follow_legal", False)
+        results["integrity"] = context.get("integrity", False)
+        if results["harm_humanity"]:
+            rule_violation_counter.inc()
+        return results
+
+    async def _process_request(self, request_data):
+        try:
+            return self._apply_rules(request_data)
+        except Exception as e:
+            logging.error(f"Error processing request: {e}")
+            return {"error": "Internal server error"}
+
+    def _start_metrics_updater(self):
+        def metrics_updater():
+            while True:
+                self._update_metrics()
+                time.sleep(5)
+
+        thread = threading.Thread(target=metrics_updater)
+        thread.daemon = True
+        thread.start()
+
+    def_update_metrics(self):
+        cpu_usage_gauge.set(psutil.cpu_percent())
+        memory_usage_gauge.set(psutil.virtual_memory().percent)
+        disk_usage_gauge.set(psutil.disk_usage("/").percent)
+        net_io = psutil.net_io_counters()
+        network_bytes_sent_gauge.set(net_io.bytes_sent)
+        network_bytes_received_gauge.set(net_io.bytes_recv)
+
+    def run(self, host="0.0.0.0", port=8000, debug=False):
+        self.app.run(host=host, port=port, debug=debug)
+
+    def _send_alertmanager(self, message, severity="error", grouping_key="default"):
+        if self.config.alertmanager_url:
+            try:
+                alert = {
+                    "labels": {
+                        "alertname": "PrimaryDirectivesAlert",
+                        "severity": severity,
+                        "grouping_key": grouping_key,
+                    },
+                    "annotations": {"message": message},
+                }
+                response = httpx.post(self.config.alertmanager_url, json=alert)
+                response.raise_for_status()
+                logging.info(f"Alert sent to Alertmanager: {message}")
+            except httpx.HTTPStatusError as e:
+                logging.error(f"Failed to send alert to Alertmanager: {e}")
+            except Exception as e:
+                logging.exception("Unexpected error sending alert to Alertmanager:")
+        else:
+            logging.warning("Alertmanager URL not configured.")
+
+
+if __name__ == "__main__":
+    app = PrimaryDirectives()
+    app.run()
