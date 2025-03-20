@@ -1,4 +1,4 @@
-Here's comprehensive documentation for the four code segments:
+Documentation for the four code segments:
 1. PrimaryDirectives Documentation
 # PrimaryDirectives Class Documentation
 
