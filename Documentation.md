@@ -105,7 +105,7 @@ External Dependencies
 
 
 
-#sub2_delete Function Documentation
+# sub2_delete Function Documentation
 
 ## Overview
 
