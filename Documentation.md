@@ -1,5 +1,5 @@
 Documentation for the four code segments:
-1. PrimaryDirectives Documentation
+
 # PrimaryDirectives Class Documentation
 
 ## Overview
@@ -70,7 +70,7 @@ The `PrimaryDirectives` class represents the main Flask application, acting as a
 * Configuration is managed using Pydantic `Settings` and environment variables.
 * Key configurations include database URL, port, host, encryption key, and log level.
 
-2. sub1_encrypt Documentation
+
 # sub1_encrypt Function Documentation
 
 ## Overview
