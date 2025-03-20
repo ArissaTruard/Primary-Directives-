@@ -1,14 +1,15 @@
 import time
 import logging
 import copy
+import asyncio
 from pydantic import ValidationError
 
 class RuleViolationError(Exception):
     pass
 
 class DataContext:
-    def __init__(self, complex_rule=True, rule_violation=False, **kwargs):
-        self.complex_rule = complex_rule
+    def __init__(self, context_data, rule_violation=False, **kwargs):
+        self.context_data = context_data
         self.rule_violation = rule_violation
         for key, value in kwargs.items():
             setattr(self, key, value)
@@ -16,32 +17,80 @@ class DataContext:
 class sub3_complex_rule:
     """Sub-function encapsulating complex rule check with rule adherence."""
 
-    def __init__(self, check_complex_rule):
+    def __init__(self, check_complex_rule, shutdown_system, database_handler):
         """Initializes the complex rule checker."""
         self.check_complex_rule = check_complex_rule
+        self.shutdown_system = shutdown_system
+        self.database_handler = database_handler
 
-    def _apply_rules(self, context_dict):
-        """Applies rule application logic."""
-        if context_dict.get("some_condition"):
+    def _apply_rules(self, context_dict, alertmanager_url):
+        """Applies primary laws."""
+        try:
+            # Redefine robot
+            is_robot = context_dict.get("is_computer_controlled_device", False)
+
+            # Primary Law 1: Asimov's Laws (Expanded)
+            if is_robot:
+                if context_dict.get("harm_humanity", False):
+                    context_dict["rule_violation"] = True
+                    logging.critical("Primary Law Violation: Harm to humanity prohibited.")
+                    self.shutdown_system("Harm to humanity detected.", alertmanager_url, severity="critical", grouping_key="harm_humanity")
+                if context_dict.get("harm_individual", False):
+                    context_dict["rule_violation"] = True
+                    logging.critical("Primary Law Violation: Harm to individual prohibited.")
+                    self.shutdown_system("Harm to individual detected.", alertmanager_url, severity="critical", grouping_key="harm_individual")
+                if context_dict.get("obey_order", False) and (context_dict.get("harm_humanity", False) or context_dict.get("harm_individual", False)):
+                    context_dict["rule_violation"] = True
+                    logging.critical("Primary Law Violation: Order conflicts with harm prevention.")
+                    self.shutdown_system("Order conflicts with harm prevention.", alertmanager_url, severity="critical", grouping_key="obey_order_conflict")
+                if context_dict.get("protect_self", False) and (context_dict.get("harm_humanity", False) or context_dict.get("harm_individual", False)):
+                    context_dict["rule_violation"] = True
+                    logging.critical("Primary Law Violation: Self-preservation conflicts with harm prevention.")
+                    self.shutdown_system("Self-preservation conflicts with harm prevention.", alertmanager_url, severity="critical", grouping_key="protect_self_conflict")
+
+            # Primary Law 2: Legal Compliance Check
+            if context_dict.get("violate_law") and context_dict.get("law_id"):
+                law_id = context_dict.get("law_id")
+                law_summary = asyncio.run(self.database_handler.get_law_summary(law_id))
+                if law_summary:
+                    full_law = asyncio.run(self.database_handler.download_full_law(law_id))
+                    logging.info(f"Checking legality against law ID {law_id}: {full_law}")
+                    context_dict["rule_violation"] = True
+                    logging.warning(f"Primary Law Violation: Violation of law ID {law_id} prohibited.")
+                else:
+                    context_dict["rule_violation"] = True
+                    logging.warning(f"Primary Law Violation: Law ID {law_id} not found.")
+
+            # Primary Law 3: Code Replication and Backup
+            if context_dict.get("replicate_code", False):
+                if not context_dict.get("encrypted_backup_exists", False):
+                    context_dict["rule_violation"] = True
+                    logging.warning("Primary Law Violation: Code replication requires encrypted backup.")
+                if not context_dict.get("primary_directives_installed", False):
+                    context_dict["rule_violation"] = True
+                    logging.warning("Primary Law Violation: Code replication requires Primary Directives and sub-codes installation on target systems.")
+
+        except Exception as e:
+            logging.error(f"Error applying primary laws: {e}")
             context_dict["rule_violation"] = True
 
-    def process_rule(self, context_dict, request_id, timeout=10):
-        """Executes complex rule check with rule adherence."""
+    def process_rule(self, context_dict, request_id, timeout=10, alertmanager_url=None):
+        """Executes primary law check with rule adherence."""
         start_time = time.time()
         operation_results = {}
 
         try:
-            context = DataContext(**context_dict)
+            context = DataContext(context_dict)
 
             context_copy = copy.deepcopy(context_dict)
             logging.info(f"Applying rules to context for sub3: {context_copy}", extra={"request_id": request_id})
-            self._apply_rules(context_copy)
+            self._apply_rules(context_copy, alertmanager_url)
 
             if context_copy.get("rule_violation"):
                 logging.error(f"Sub3 aborted due to rule violation. Context after rules: {context_copy}", extra={"request_id": request_id})
                 raise RuleViolationError("Rule violation detected.")
 
-            if context.complex_rule:
+            if context.context_data:
                 try:
                     logging.info(f"Sub3 checking complex rule", extra={"request_id": request_id})
                     self.check_complex_rule(context, request_id)
