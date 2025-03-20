@@ -1,0 +1,55 @@
+    def sub3_complex_rule(self, context_dict, request_id, timeout=10):
+        """Sub-function encapsulating complex rule check with rule adherence."""
+        start_time = time.time()
+        operation_results = {} #store the results of each operation.
+
+        try:
+            context = DataContext(**context_dict)  # Validate context
+
+            # Apply rules before operations
+            context_copy = copy.deepcopy(context_dict)
+            logging.info(f"Applying rules to context for sub3: {context_copy}", extra={"request_id": request_id})
+            self._apply_rules(context_copy)
+
+            # Check for rule violations
+            if context_copy.get("rule_violation"):
+                logging.error(f"Sub3 aborted due to rule violation. Context after rules: {context_copy}", extra={"request_id": request_id})
+                raise RuleViolationError("Rule violation detected.")
+
+            if context.complex_rule:
+                try:
+                    logging.info(f"Sub3 checking complex rule", extra={"request_id": request_id})
+                    self.check_complex_rule(context, request_id)
+                    operation_results['complex_rule'] = "success"
+                except Exception as e:
+                    logging.error(f"Error checking complex rule: {e}", extra={"request_id": request_id})
+                    operation_results['complex_rule'] = f"failure: {e}"
+
+            if time.time() - start_time > timeout:
+                logging.error(f"Sub3 timed out after {timeout} seconds", extra={'request_id': request_id})
+                operation_results["timeout"] = "global timeout"
+                return operation_results
+
+            logging.info(f"Sub3 executed successfully", extra={"request_id": request_id})
+            operation_results['sub3_result'] = "success"
+            return operation_results
+
+        except ValidationError as e:
+            logging.error(f"Sub3 Validation Error : {e}", extra={'request_id': request_id})
+            operation_results['sub3_result'] = f"validation_error: {e}"
+            return operation_results
+
+        except RuleViolationError as e:
+            operation_results['sub3_result'] = f"rule_violation: {e}"
+            return operation_results
+
+        except Exception as e:
+            logging.error(f"Sub3 error: {e}", extra={'request_id': request_id})
+            operation_results['sub3_result'] = f"general_error: {e}"
+            return operation_results
+
+        finally:
+            if time.time() - start_time > timeout:
+                logging.error(f"Sub3 timed out after {timeout} seconds, final block", extra={'request_id': request_id})
+                operation_results["timeout"] = "final block timeout"
+                return operation_results
