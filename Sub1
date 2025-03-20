@@ -1,46 +1,81 @@
-    def sub1(self, context_dict, key, delete_func, request_id, timeout=10):
-        """Sub-function encapsulating complex operations with rule adherence."""
-        start_time = time.time()
-        try:
-            context = DataContext(**context_dict)  # Validate context
+def sub1(self, context_dict, key, delete_func, request_id, timeout=10):
+    """Sub-function encapsulating complex operations with rule adherence."""
+    start_time = time.time()
+    operation_results = {} #store the results of each operation.
 
-            # Apply rules before operations
-            context_copy = copy.deepcopy(context_dict)
-            logging.info(f"Applying rules to context for sub1: {context_copy}", extra={"request_id": request_id})
-            self._apply_rules(context_copy)
+    try:
+        context = DataContext(**context_dict)  # Validate context
 
-            # Check for rule violations (example: if rules set a flag)
-            if context_copy.get("rule_violation"):
-                logging.error(f"Sub1 aborted due to rule violation. Context after rules: {context_copy}", extra={"request_id": request_id})
-                return False
+        # Apply rules before operations
+        context_copy = copy.deepcopy(context_dict)
+        logging.info(f"Applying rules to context for sub1: {context_copy}", extra={"request_id": request_id})
+        self._apply_rules(context_copy)
 
-            if context.encrypt_data:
+        # Check for rule violations
+        if context_copy.get("rule_violation"):
+            logging.error(f"Sub1 aborted due to rule violation. Context after rules: {context_copy}", extra={"request_id": request_id})
+            raise RuleViolationError("Rule violation detected.")
+
+        # Context Validation
+        if not isinstance(context.data, dict):
+            logging.error(f"Invalid context.data: {context.data}", extra={"request_id": request_id})
+            raise ValueError("context.data must be a dictionary.")
+
+        # Encrypt data
+        if context.encrypt_data:
+            try:
                 logging.info(f"Sub1 encrypting data: {context.data}", extra={"request_id": request_id})
                 self.encrypt_data(context.data, key, request_id)
+                operation_results['encrypt_data'] = "success"
+            except Exception as e:
+                logging.error(f"Error encrypting data: {e}", extra={"request_id": request_id})
+                operation_results['encrypt_data'] = f"failure: {e}"
 
-            if context.delete_copies:
+        # Delete copies
+        if context.delete_copies:
+            try:
                 logging.info(f"Sub1 deleting copies", extra={"request_id": request_id})
                 self.delete_inactive_copies_func(delete_func, request_id)
+                operation_results['delete_copies'] = "success"
+            except Exception as e:
+                logging.error(f"Error deleting copies: {e}", extra={"request_id": request_id})
+                operation_results['delete_copies'] = f"failure: {e}"
 
-            if context.complex_rule:
+        # Check complex rule
+        if context.complex_rule:
+            try:
                 logging.info(f"Sub1 checking complex rule", extra={"request_id": request_id})
                 self.check_complex_rule(context, request_id)
+                operation_results['complex_rule'] = "success"
+            except Exception as e:
+                logging.error(f"Error checking complex rule: {e}", extra={"request_id": request_id})
+                operation_results['complex_rule'] = f"failure: {e}"
 
-            if time.time() - start_time > timeout:
-                logging.error(f"Sub1 timed out after {timeout} seconds", extra={'request_id': request_id})
-                return False
+        if time.time() - start_time > timeout:
+            logging.error(f"Sub1 timed out after {timeout} seconds", extra={'request_id': request_id})
+            operation_results["timeout"] = "global timeout"
+            return operation_results
 
-            logging.info(f"Sub1 executed successfully", extra={"request_id": request_id})
-            return True
+        logging.info(f"Sub1 executed successfully", extra={"request_id": request_id})
+        operation_results['sub1_result'] = "success"
+        return operation_results
 
-        except ValidationError as e:
-            logging.error(f"Sub1 Validation Error : {e}", extra={'request_id': request_id})
-            return False
+    except ValidationError as e:
+        logging.error(f"Sub1 Validation Error : {e}", extra={'request_id': request_id})
+        operation_results['sub1_result'] = f"validation_error: {e}"
+        return operation_results
 
-        except Exception as e:
-            logging.error(f"Sub1 error: {e}", extra={'request_id': request_id})
-            return False
-        finally:
-            if time.time() - start_time > timeout:
-                logging.error(f"Sub1 timed out after {timeout} seconds, final block", extra={'request_id': request_id})
-                return False
+    except RuleViolationError as e:
+        operation_results['sub1_result'] = f"rule_violation: {e}"
+        return operation_results
+
+    except Exception as e:
+        logging.error(f"Sub1 error: {e}", extra={'request_id': request_id})
+        operation_results['sub1_result'] = f"general_error: {e}"
+        return operation_results
+
+    finally:
+        if time.time() - start_time > timeout:
+            logging.error(f"Sub1 timed out after {timeout} seconds, final block", extra={'request_id': request_id})
+            operation_results["timeout"] = "final block timeout"
+            return operation_results
