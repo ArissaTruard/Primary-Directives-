@@ -49,6 +49,7 @@ from sub3_complex_rule import sub3_complex_rule, DataContext, RuleViolationError
 from sub_system import shutdown
 from sub_system_metrics import SystemMetrics
 from sub_database import DatabaseHandler
+from sub_location import LocationHandler # added LocationHandler
 
 class Settings(BaseSettings):
     authorization_api_url: str = "http://localhost:8080/auth"
@@ -76,7 +77,8 @@ class PrimaryDirectives:
         self.system_metrics = SystemMetrics(cpu_usage_gauge, memory_usage_gauge, disk_usage_gauge, network_bytes_sent_gauge, network_bytes_received_gauge)
         self.system_metrics.start_metrics_updater()
         self.database_handler = DatabaseHandler(self.config.law_summary_db_path)
-        self.rule_checker = sub3_complex_rule(self._check_complex_rule)
+        self.location_handler = LocationHandler() # added location handler
+        self.rule_checker = sub3_complex_rule(self._check_complex_rule, shutdown, self.database_handler)
 
     def _setup_logging(self):
         logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s", filename=self.config.log_file)
@@ -163,7 +165,7 @@ class PrimaryDirectives:
 
     def _check_complex_rule(self, context, request_id):
         #This is a placeholder for the actual complex rule checking.
-        logging.info(f"Complex rule check called: {request_id}, context: {context}")
+        logging.info(f"Complex rule check called: {request_id}, context: {context.context_data}")
         return True
 
     async def _process_request(self, request_data, request_id):
@@ -171,13 +173,17 @@ class PrimaryDirectives:
             situation_id = hashlib.sha256(json.dumps(request_data).encode()).hexdigest()
             stored_correction = await self.database_handler.get_stored_correction(situation_id)
 
-            if stored_correction:
+            if stored
                 logging.info(f"Applying stored correction for situation: {situation_id}")
                 return json.loads(stored_correction)
             else:
                 context_dict = request_data
                 try:
-                    results = self.rule_checker.process_rule(context_dict, request_id)
+                    # Get location data
+                    location_data = await self.location_handler.get_location()
+                    context_dict.update(location_data)
+
+                    results = self.rule_checker.process_rule(context_dict, request_id, alertmanager_url = self.config.alertmanager_url)
                     return results
                 except RuleViolationError:
                     rule_violation_counter.inc()
