@@ -1,0 +1,55 @@
+    def sub2_delete(self, context_dict, delete_func, request_id, timeout=10):
+        """Sub-function encapsulating deletion with rule adherence."""
+        start_time = time.time()
+        operation_results = {} #store the results of each operation.
+
+        try:
+            context = DataContext(**context_dict)  # Validate context
+
+            # Apply rules before operations
+            context_copy = copy.deepcopy(context_dict)
+            logging.info(f"Applying rules to context for sub2: {context_copy}", extra={"request_id": request_id})
+            self._apply_rules(context_copy)
+
+            # Check for rule violations
+            if context_copy.get("rule_violation"):
+                logging.error(f"Sub2 aborted due to rule violation. Context after rules: {context_copy}", extra={"request_id": request_id})
+                raise RuleViolationError("Rule violation detected.")
+
+            if context.delete_copies:
+                try:
+                    logging.info(f"Sub2 deleting copies", extra={"request_id": request_id})
+                    self.delete_inactive_copies_func(delete_func, request_id)
+                    operation_results['delete_copies'] = "success"
+                except Exception as e:
+                    logging.error(f"Error deleting copies: {e}", extra={"request_id": request_id})
+                    operation_results['delete_copies'] = f"failure: {e}"
+
+            if time.time() - start_time > timeout:
+                logging.error(f"Sub2 timed out after {timeout} seconds", extra={'request_id': request_id})
+                operation_results["timeout"] = "global timeout"
+                return operation_results
+
+            logging.info(f"Sub2 executed successfully", extra={"request_id": request_id})
+            operation_results['sub2_result'] = "success"
+            return operation_results
+
+        except ValidationError as e:
+            logging.error(f"Sub2 Validation Error : {e}", extra={'request_id': request_id})
+            operation_results['sub2_result'] = f"validation_error: {e}"
+            return operation_results
+
+        except RuleViolationError as e:
+            operation_results['sub2_result'] = f"rule_violation: {e}"
+            return operation_results
+
+        except Exception as e:
+            logging.error(f"Sub2 error: {e}", extra={'request_id': request_id})
+            operation_results['sub2_result'] = f"general_error: {e}"
+            return operation_results
+
+        finally:
+            if time.time() - start_time > timeout:
+                logging.error(f"Sub2 timed out after {timeout} seconds, final block", extra={'request_id': request_id})
+                operation_results["timeout"] = "final block timeout"
+                return operation_results
