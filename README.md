@@ -1,4 +1,4 @@
-Here's a comprehensive summary of the four code segments:
+Summary of the four code segments:
 1. PrimaryDirectives (Main Application Class):
  * Core Functionality:
    * This class represents the main Flask application, acting as an "Action Filter."
