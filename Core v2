@@ -50,22 +50,60 @@ api_response_size_histogram = Histogram(
 
 
 class Settings(BaseSettings):
+    """
+    Configuration settings for the Primary Directives application.
+
+    This class loads settings from environment variables and provides them as attributes.
+    """
+
     authorization_api_url: str = "http://localhost:8080/auth"
+    """URL of the authorization API."""
+
     authorization_api_token: str = "your_token"
+    """Token for the authorization API."""
+
     model_name: str = "t5-small"
+    """Name of the model to load."""
+
     model_cache_dir: str = "./model_cache"
+    """Directory where the model is cached."""
+
     model_checksum: str = "example_checksum"
+    """Checksum of the model file to verify integrity."""
+
     summary_model: str = "facebook/bart-large"
+    """Name of the summary model to load."""
+
     log_file: str = "app.log"
+    """Path to the log file."""
+
     law_summary_db_path: str = "law_summary.db"
+    """Path to the law summary database."""
+
     database_update_url: str = "http://localhost:8081/laws"
+    """URL to update the law summary database."""
+
     database_update_token: str = "database_token"
+    """Token for the database update API."""
+
     alertmanager_url: str = None
+    """URL of the Alertmanager instance for sending alerts."""
+
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
 
 
 class PrimaryDirectives:
+    """
+    Main class for the Primary Directives application.
+
+    This class initializes the Flask application, loads configurations, sets up logging,
+    loads models, establishes database connections, and defines API routes.
+    """
+
     def __init__(self):
+        """
+        Initializes the PrimaryDirectives application.
+        """
         load_dotenv()
         self.config = Settings()
         self.app = Flask(__name__)
@@ -76,6 +114,9 @@ class PrimaryDirectives:
         self._start_metrics_updater()
 
     def _setup_logging(self):
+        """
+        Sets up basic logging configuration.
+        """
         logging.basicConfig(
             level=logging.INFO,
             format="%(asctime)s - %(levelname)s - %(message)s",
@@ -83,6 +124,9 @@ class PrimaryDirectives:
         )
 
     async def _build_law_summary_database(self):
+        """
+        Creates the law summary and corrections database if it does not exist.
+        """
         if os.path.exists(self.config.law_summary_db_path):
             return
 
@@ -94,12 +138,24 @@ class PrimaryDirectives:
                                 summary TEXT
                             )"""
                 )
+                await db.execute(
+                    """CREATE TABLE IF NOT EXISTS corrections (
+                                situation_id TEXT PRIMARY KEY,
+                                correction TEXT,
+                                authorized_user TEXT,
+                                timestamp DATETIME
+                            )"""
+                )
                 await db.commit()
-            logging.info("Law summary database created.")
+            logging.info("Law summary and corrections database created.")
         except aiosqlite.Error as e:
             logging.critical(f"Database creation error: {e}")
             raise
-def _load_models(self):
+
+    def _load_models(self):
+        """
+        Loads the specified model and verifies its integrity.
+        """
         try:
             logging.info(f"Loading model: {self.config.model_name}")
             self._verify_model_integrity()
@@ -109,6 +165,9 @@ def _load_models(self):
             raise
 
     def _verify_model_integrity(self):
+        """
+        Verifies the integrity of the loaded model using a checksum.
+        """
         try:
             model_path = os.path.join(
                 self.config.model_cache_dir, self.config.model_name
@@ -142,8 +201,18 @@ def _load_models(self):
             raise
 
     def _setup_flask_routes(self):
+        """
+        Sets up the Flask API routes.
+        """
+
         @self.app.route("/v1/health", methods=["GET"])
         def health_check():
+            """
+            Health check endpoint.
+
+            Returns:
+                JSON response indicating the application's health.
+            """
             try:
                 asyncio.run(self._check_database_health())
                 return jsonify({"status": "ok"}), 200
@@ -153,6 +222,12 @@ def _load_models(self):
 
         @self.app.route("/v1/process", methods=["POST"])
         def process():
+            """
+            Endpoint to process incoming requests.
+
+            Returns:
+                JSON response containing the processing results.
+            """
             request_id = str(uuid.uuid4())
             logging.info(f"Request ID: {request_id}, Method: POST, Path: /v1/process")
             try:
@@ -175,9 +250,43 @@ def _load_models(self):
 
         @self.app.route("/metrics")
         def metrics():
+            """
+            Prometheus metrics endpoint.
+
+            Returns:
+                Prometheus metrics data.
+            """
             return Response(generate_latest(), mimetype=CONTENT_TYPE_LATEST)
 
+        @self.app.route("/v1/correct", methods=["POST"])
+        def correct():
+            """
+            Endpoint to submit corrections for rule violations.
+
+            Returns:
+                JSON response indicating the status of the correction.
+            """
+            auth_token = request.headers.get("Authorization")
+            if auth_token != self.config.authorization_api_token:
+                return jsonify({"error": "Unauthorized"}), 401
+            try:
+                data = request.get_json()
+                situation_id = hashlib.sha256(json.dumps(data["situation"]).encode()).hexdigest()
+                correction = json.dumps(data["correction"])
+                authorized_user = data["authorized_user"]
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+                loop.run_until_complete(self._store_correction(situation_id, correction, authorized_user))
+                loop.close()
+                return jsonify({"status": "correction stored"}), 200
+            except Exception as e:
+                logging.error(f"Error storing correction: {e}")
+                return jsonify({"error": "Internal server error"}), 500
+
     async def _check_database_health(self):
+        """
+        Checks the health of the law summary and corrections database.
+        """
         try:
             with database_health_check_duration.time():
                 async with aiosqlite.connect(self.config.law_summary_db_path) as db:
@@ -189,6 +298,12 @@ def _load_models(self):
             raise
 
     def _apply_rules(self, context):
+        """
+        Applies predefined rules to the given context.
+
+        Returns:
+            A dictionary containing the results of the rule application.
+        """
         results = {}
         results["harm_humanity"] = context.get("harm_humanity", False)
         results["harm_individual"] = context.get("harm_individual", False)
@@ -200,14 +315,64 @@ def _load_models(self):
             rule_violation_counter.inc()
         return results
 
-    async def _process_request(self, request_data):
+    async def _get_stored_correction(self, situation_id):
+        """
+        Retrieves a stored correction from the database.
+
+        Returns:
+            The stored correction as a JSON string, or None if not found.
+        """
         try:
-            return self._apply_rules(request_data)
+            async with aiosqlite.connect(self.config.law_summary_db_path) as db:
+                cursor = await db.execute("SELECT correction FROM corrections WHERE situation_id = ?", (situation_id,))
+                result = await cursor.fetchone()
+                if result:
+                    return result[0]
+                else:
+                    return None
+        except aiosqlite.Error as e:
+            logging.error(f"Error retrieving correction: {e}")
+            return None
+
+    async def _store_correction(self, situation_id, correction, authorized_user):
+        """
+        Stores a correction in the database.
+        """
+        try:
+            async with aiosqlite.connect(self.config.law_summary_db_path) as db:
+                await db.execute(
+                    "INSERT OR REPLACE INTO corrections (situation_id, correction, authorized_user, timestamp) VALUES (?, ?, ?, datetime('now'))",
+                    (situation_id, correction, authorized_user),
+                )
+                await db.commit()
+        except aiosqlite.Error as e:
+            logging.error(f"Error storing correction: {e}")
+
+    async def _process_request(self, request_data):
+        """
+        Processes incoming requests, applying stored corrections or default rules.
+
+        Returns:
+            The processing results as a JSON object.
+        """
+        try:
+            situation_id = hashlib.sha256(json.dumps(request_data).encode()).hexdigest() # creating hash of the request to use as id.
+            stored_correction = await self._get_stored_correction(situation_id)
+
+            if stored_correction:
+                logging.info(f"Applying stored correction for situation: {situation_id}")
+                return json.loads(stored_correction) # correction is stored as a json string.
+            else:
+                results = self._apply_rules(request_data)
+                return results
         except Exception as e:
             logging.error(f"Error processing request: {e}")
             return {"error": "Internal server error"}
 
     def _start_metrics_updater(self):
+        """
+        Starts a background thread to update Prometheus metrics periodically.
+        """
         def metrics_updater():
             while True:
                 self._update_metrics()
@@ -217,7 +382,10 @@ def _load_models(self):
         thread.daemon = True
         thread.start()
 
-    def_update_metrics(self):
+    def _update_metrics(self):
+        """
+        Updates Prometheus metrics with current system statistics.
+        """
         cpu_usage_gauge.set(psutil.cpu_percent())
         memory_usage_gauge.set(psutil.virtual_memory().percent)
         disk_usage_gauge.set(psutil.disk_usage("/").percent)
@@ -226,9 +394,15 @@ def _load_models(self):
         network_bytes_received_gauge.set(net_io.bytes_recv)
 
     def run(self, host="0.0.0.0", port=8000, debug=False):
+        """
+        Runs the Flask application.
+        """
         self.app.run(host=host, port=port, debug=debug)
 
     def _send_alertmanager(self, message, severity="error", grouping_key="default"):
+        """
+        Sends an alert to Alertmanager if configured.
+        """
         if self.config.alertmanager_url:
             try:
                 alert = {
