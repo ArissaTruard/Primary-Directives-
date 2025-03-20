@@ -113,7 +113,7 @@ The `sub2_delete` function handles the deletion of inactive copies of code or da
 
 ## Function Signature
 
-```python
+*python
 def sub2_delete(self, context_dict, delete_func, request_id, timeout=10):
 
 Parameters
