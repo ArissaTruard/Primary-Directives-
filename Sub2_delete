@@ -1,17 +1,41 @@
-    def sub2_delete(self, context_dict, delete_func, request_id, timeout=10):
-        """Sub-function encapsulating deletion with rule adherence."""
+import time
+import logging
+import copy
+from pydantic import ValidationError
+
+class RuleViolationError(Exception):
+    pass
+
+class DataContext:
+    def __init__(self, delete_copies=True, rule_violation=False, **kwargs):
+        self.delete_copies = delete_copies
+        self.rule_violation = rule_violation
+        for key, value in kwargs.items():
+            setattr(self, key, value)
+
+class sub2_delete:
+    """Sub-function encapsulating deletion with rule adherence."""
+
+    def __init__(self, delete_inactive_copies_func):
+        self.delete_inactive_copies_func = delete_inactive_copies_func
+
+    def _apply_rules(self, context_dict):
+        """Implement your rule application logic here."""
+        if context_dict.get("some_condition"):
+            context_dict["rule_violation"] = True
+
+    def delete(self, context_dict, request_id, timeout=10):
+        """Executes deletion with rule adherence."""
         start_time = time.time()
-        operation_results = {} #store the results of each operation.
+        operation_results = {}
 
         try:
-            context = DataContext(**context_dict)  # Validate context
+            context = DataContext(**context_dict)
 
-            # Apply rules before operations
             context_copy = copy.deepcopy(context_dict)
             logging.info(f"Applying rules to context for sub2: {context_copy}", extra={"request_id": request_id})
             self._apply_rules(context_copy)
 
-            # Check for rule violations
             if context_copy.get("rule_violation"):
                 logging.error(f"Sub2 aborted due to rule violation. Context after rules: {context_copy}", extra={"request_id": request_id})
                 raise RuleViolationError("Rule violation detected.")
@@ -19,7 +43,7 @@
             if context.delete_copies:
                 try:
                     logging.info(f"Sub2 deleting copies", extra={"request_id": request_id})
-                    self.delete_inactive_copies_func(delete_func, request_id)
+                    self.delete_inactive_copies_func(request_id) #delete_func argument removed.
                     operation_results['delete_copies'] = "success"
                 except Exception as e:
                     logging.error(f"Error deleting copies: {e}", extra={"request_id": request_id})
