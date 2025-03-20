@@ -144,7 +144,7 @@ The `sub3_complex_rule` function evaluates a complex rule based on the provided 
 
 ## Function Signature
 
-```python
+*python
 def sub3_complex_rule(self, context_dict, request_id, timeout=10):
 
 Parameters
