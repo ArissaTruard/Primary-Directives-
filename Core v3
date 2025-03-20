@@ -74,6 +74,10 @@ class DataContext(BaseModel):
     complex_rule: bool = False
     condition1: bool = False
     condition2: bool = False
+    action: str = ""
+    user_role: str = ""
+    system_location: str = ""
+    time_of_day: str = ""
 
 class Settings(BaseSettings):
     """Configuration settings for the Primary Directives application."""
@@ -210,10 +214,9 @@ class PrimaryDirectives:
         async def execute_sub1():
             """Executes sub1."""
             try:
-                request_data = ProcessRequest(**request.get_json())
+                request_data = ProcessRequest(**request.get
                 context_dict = request_data.context
-                request
-                id = request_data.request_id
+                request_id = request_data.request_id
 
                 if self.sub1(context_dict, self.config.encryption_key, self._delete_inactive_copies, request_id, timeout=5):
                     return jsonify({"status": "sub1 executed successfully"})
@@ -280,6 +283,14 @@ class PrimaryDirectives:
         # Example rule: Check for unauthorized actions
         if context.get("action") == "delete_file":
             logging.warning(f"Rule violation: Unauthorized action detected. Context: {context}", extra={'request_id': request_id})
+            context["rule_violation"] = True
+
+        # Example rule: Complex scenario with multiple conditions
+        if context.get("action") == "access_resource" and \
+           context.get("user_role") == "guest" and \
+           context.get("system_location") == "external" and \
+           context.get("time_of_day") not in ["morning", "evening"]:
+            logging.warning(f"Rule violation: Unauthorized resource access attempt.", extra={'request_id': request_id})
             context["rule_violation"] = True
 
         # Add more rules here...
@@ -370,7 +381,8 @@ class PrimaryDirectives:
             return False
 
         except Exception as e:
-            logging.error(f"Sub1 error: {e}", extra={'request_id': request_id})
+            logging.error(f"Sub1 error: {e}", extra={'request_id': request_
+id})
             return False
         finally:
             if time.time() - start_time > timeout:
@@ -380,8 +392,7 @@ class PrimaryDirectives:
     def run(self):
         """Runs the Flask application."""
         if self.config.use_https:
-            self.app.run(host=self.config.host, port=self.config.port, ssl=(self.config.https_cert_path, self.config.https_key_path
-))
+            self.app.run(host=self.config.host, port=self.config.port, ssl=(self.config.https_cert_path, self.config.https_key_path))
         else:
             self.app.run(host=self.config.host, port=self.config.port)
 
