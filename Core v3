@@ -1,0 +1,390 @@
+import time
+import json
+from cryptography.fernet import Fernet
+import logging
+from pydantic import BaseModel, ValidationError
+from datetime import datetime, timedelta
+import copy
+import uuid
+import os
+import logging.handlers
+import threading
+import psutil
+from flask import Flask, jsonify, request, Response
+from prometheus_client import (
+    CONTENT_TYPE_LATEST,
+    Gauge,
+    Histogram,
+    generate_latest,
+    Counter,
+)
+from pydantic_settings import BaseSettings, SettingsConfigDict
+from sqlalchemy import create_engine, Column, Integer, String, DateTime, func
+from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.orm import sessionmaker
+import secrets
+from dotenv import load_dotenv
+import json_logging
+
+# Setup logging
+logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
+logger = logging.getLogger(__name__)
+
+# Prometheus metrics
+rule_violation_counter = Counter("rule_violations", "Number of rule violations")
+request_latency = Histogram("request_latency", "Request latency in seconds")
+cpu_usage = Gauge("cpu_usage", "CPU usage percentage")
+memory_usage = Gauge("memory_usage", "Memory usage percentage")
+
+# Database setup
+Base = declarative_base()
+
+class Law(Base):
+    """Model for law summaries."""
+
+    __tablename__ = "laws"
+    id = Column(Integer, primary_key=True)
+    summary = Column(String)
+    timestamp = Column(DateTime, default=func.now())
+
+class Correction(Base):
+    """Model for corrections."""
+
+    __tablename__ = "corrections"
+    id = Column(Integer, primary_key=True)
+    correction = Column(String)
+    timestamp = Column(DateTime, default=func.now())
+
+class ProcessRequest(BaseModel):
+    """Request model for processing."""
+
+    context: dict
+    request_id: str = str(uuid.uuid4())
+
+class CorrectionRequest(BaseModel):
+    """Request model for corrections."""
+
+    correction: str
+
+class DataContext(BaseModel):
+    """Pydantic model for data context validation."""
+    encrypt_data: bool = False
+    data: dict = {}
+    delete_copies: bool = False
+    complex_rule: bool = False
+    condition1: bool = False
+    condition2: bool = False
+
+class Settings(BaseSettings):
+    """Configuration settings for the Primary Directives application."""
+
+    database_url: str = "sqlite:///primary_directives.db"
+    port: int = 5000
+    host: str = "0.0.0.0"
+    hidden_backup_path: str = ".encrypted_backup"
+    encryption_key: str = secrets.token_urlsafe(32)
+    watermark: str = secrets.token_urlsafe(16)
+    use_https: bool = True
+    https_cert_path: str = "cert.pem"
+    https_key_path: str = "key.pem"
+    max_copies: int = 2
+    known_systems: list[str] = ["system1:5000", "system2:5000"]
+    authorization_api_token: str = secrets.token_urlsafe(32)
+    log_level: str = "INFO"
+    log_file: str = "primary_directives.log"
+
+    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
+
+class PrimaryDirectives:
+    """Main class for the Primary Directives application (Action Filter)."""
+
+    def __init__(self):
+        """Initializes the PrimaryDirectives application."""
+        load_dotenv()
+        self.config = Settings()
+        self.app = Flask(__name__)
+        self._setup_logging()
+        self._setup_database()
+        self._load_models()
+        self._setup_flask_routes()
+        self._start_metrics_updater()
+        self._ensure_backup()
+        self._integrity_check_backup()
+        self.fernet = Fernet(self.config.encryption_key.encode())
+        self.known_systems = self.config.known_systems
+        self.copy_count = 0
+
+    def _setup_logging(self):
+        """Sets up logging for the application."""
+        numeric_level = getattr(logging, self.config.log_level.upper(), None)
+        if not isinstance(numeric_level, int):
+            raise ValueError(f"Invalid log level: {self.config.log_level}")
+
+        logger.setLevel(numeric_level)
+
+        file_handler = logging.handlers.RotatingFileHandler(self.config.log_file, maxBytes=10*1024*1024, backupCount=5)
+        formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s - %(request_id)s')
+        file_handler.setFormatter(formatter)
+        logger.addHandler(file_handler)
+
+        json_logging.init_flask(enable_json=True)
+        json_logging.init_request_instrument(self.app)
+
+    def _setup_database(self):
+        """Sets up the database connection and tables."""
+        self.engine = create_engine(self.config.database_url)
+        Base.metadata.create_all(self.engine)
+        self.Session = sessionmaker(bind=self.engine)
+
+    def _load_models(self):
+        """Loads database models."""
+        pass
+
+    def _setup_flask_routes(self):
+        """Sets up Flask routes."""
+
+        @self.app.route("/process", methods=["POST"])
+        async def process():
+            """Processes incoming requests."""
+            start_time = time.time()
+            try:
+                request_data = ProcessRequest(**request.get_json())
+                context = request_data.context
+                request_id = request_data.request_id
+                with logger.handlers[0].lock:
+                    logger.handlers[0].formatter.defaults['request_id'] = request_id
+                    self._apply_rules(context)
+                return jsonify({"status": "processed"})
+            except ValidationError as e:
+                logger.warning(f"Validation error: {e}")
+                return jsonify({"error": str(e)}), 400
+            except Exception as e:
+                self._handle_error(f"Error processing request: {e}", request_id=request_id)
+                return jsonify({"error": "Internal Server Error"}), 500
+            finally:
+                latency = time.time() - start_time
+                request_latency.observe(latency)
+                with logger.handlers[0].lock:
+                    logger.handlers[0].formatter.defaults['request_id'] = None
+
+        @self.app.route("/correction", methods=["POST"])
+        async def correction():
+            """Handles correction requests."""
+            request_id = str(uuid.uuid4())
+            try:
+                request_data = CorrectionRequest(**request.get_json())
+                correction_text = request_data.correction
+                with self.Session() as session:
+                    new_correction = Correction(correction=correction_text)
+                    session.add(new_correction)
+                    session.commit()
+                return jsonify({"status": "correction recorded"})
+            except ValidationError as e:
+                logger.warning(f"Validation error: {e}")
+                return jsonify({"error": str(e)}), 400
+            except Exception as e:
+                self._handle_error(f"Error recording correction: {e}", request_id=request_id)
+                return jsonify({"error": "Internal Server Error"}), 500
+
+        @self.app.route("/metrics")
+        def metrics():
+            """Exposes Prometheus metrics."""
+            return Response(generate_latest(), mimetype=CONTENT_TYPE_LATEST)
+
+        @self.app.route("/health")
+        def health():
+            """Health check endpoint."""
+            return jsonify({"status": "healthy"})
+
+        @self.app.route("/shutdown", methods=["POST"])
+        def shutdown():
+            """Secure shutdown endpoint."""
+            auth_token = request.headers.get("Authorization")
+            if auth_token != self.config.authorization_api_token:
+                logger.warning("Unauthorized shutdown attempt.")
+                return jsonify({"error": "Unauthorized"}), 401
+            logger.info("Secure shutdown initiated.")
+            os._exit(0)
+
+        @self.app.route("/execute_sub1", methods=["POST"])
+        async def execute_sub1():
+            """Executes sub1."""
+            try:
+                request_data = ProcessRequest(**request.get_json())
+                context_dict = request_data.context
+                request
+                id = request_data.request_id
+
+                if self.sub1(context_dict, self.config.encryption_key, self._delete_inactive_copies, request_id, timeout=5):
+                    return jsonify({"status": "sub1 executed successfully"})
+                else:
+                    return jsonify({"error": "sub1 execution failed"}), 500
+            except ValidationError as e:
+                logger.warning(f"Validation error: {e}")
+                return jsonify({"error": str(e)}), 400
+            except Exception as e:
+                self._handle_error(f"Error executing sub1: {e}", request_id=request_id)
+                return jsonify({"error": "Internal Server Error"}), 500
+
+    def _start_metrics_updater(self):
+        """Starts a thread to update Prometheus metrics."""
+
+        def update_metrics():
+            while True:
+                cpu_percent = psutil.cpu_percent()
+                mem_percent = psutil.virtual_memory().percent
+                cpu_usage.set(cpu_percent)
+                memory_usage.set(mem_percent)
+                time.sleep(1)
+
+        threading.Thread(target=update_metrics, daemon=True).start()
+
+    def _ensure_backup(self):
+        """Ensures that a secure encrypted backup exists and logs its location."""
+        if not os.path.exists(self.config.hidden_backup_path):
+            try:
+                with open(__file__, "r") as f:
+                    code = f.read()
+                watermarked_code = code.replace("# Add a watermark", f"# Watermark: {self.config.watermark}")
+                encoded_code = watermarked_code.encode("utf-8")
+                encrypted_code = self.fernet.encrypt(encoded_code)
+                with open(self.config.hidden_backup_path, "wb") as f:
+                    f.write(encrypted_code)
+                logger.info(f"Encrypted backup created at: {os.path.abspath(self.config.hidden_backup_path)}")
+            except Exception as e:
+                self._handle_error(f"Error creating encrypted backup: {e}")
+
+    def _integrity_check_backup(self):
+        """Checks the integrity of the encrypted backup at startup."""
+        if os.path.exists(self.config.hidden_backup_path):
+            try:
+                with open(self.config.hidden_backup_path, "rb") as f:
+                    encrypted_code = f.read()
+                decrypted_code = self.fernet.decrypt(encrypted_code).decode("utf-8")
+                if self.config.watermark not in decrypted_code:
+                    logger.critical("Backup integrity check failed: Watermark missing.")
+                logger.info("Backup integrity check successful.")
+            except Exception as e:
+                self._handle_error(f"Backup integrity check failed: {e}")
+
+    def _apply_rules(self, context):
+        """Applies predefined rules to the given context. Modified to set violation flag."""
+        request_id = context.get('request_id', str(uuid.uuid4()))
+        logging.info(f"Applying rules to context: {context}", extra={'request_id': request_id})
+
+        # Example rule: Check for specific keywords
+        if "sensitive_data" in str(context).lower():
+            logging.warning(f"Rule violation: Sensitive data detected. Context: {context}", extra={'request_id': request_id})
+            context["rule_violation"] = True #set the flag.
+
+        # Example rule: Check for unauthorized actions
+        if context.get("action") == "delete_file":
+            logging.warning(f"Rule violation: Unauthorized action detected. Context: {context}", extra={'request_id': request_id})
+            context["rule_violation"] = True
+
+        # Add more rules here...
+
+        logging.info(f"Rules applied, context after rules: {context}", extra={"request_id": request_id})
+
+    def _handle_error(self, message, request_id=None):
+        """Handles and logs errors."""
+        if request_id:
+            logger.error(message, extra={'request_id': request_id})
+        else:
+            logger.error(message)
+
+    def _delete_inactive_copies(self):
+        """Deletes inactive code copies. (Placeholder)."""
+        logging.warning("Inactive copy deletion triggered (placeholder).")
+        # Implement actual logic here to delete inactive copies
+        # Example:
+        # with self.Session() as session:
+        #     inactive_copies = session.query(CodeCopy).filter(CodeCopy.last_access < datetime.now() - timedelta(days=7)).all()
+        #     for copy in inactive_copies:
+        #         os.remove(copy.location)
+        #         session.delete(copy)
+        #     session.commit()
+
+    def encrypt_data(self, data, key, request_id):
+        """Encrypts data using the given key."""
+        fernet = Fernet(key.encode())
+        encrypted_data = fernet.encrypt(json.dumps(data).encode())
+        logging.info(f"Data encrypted: {encrypted_data}", extra={'request_id': request_id})
+        return encrypted_data
+
+    def delete_inactive_copies_func(self, delete_function, request_id):
+        """Deletes inactive code copies using the provided function."""
+        try:
+            delete_function()
+            logging.info("Inactive copies deletion triggered", extra={'request_id': request_id})
+        except Exception as e:
+            logging.error(f"Error in delete function: {e}", extra={"request_id": request_id})
+
+    def check_complex_rule(self, context, request_id):
+        """Checks a complex rule."""
+        if context.condition1 and context.condition2:
+            logging.info("Complex rule triggered", extra={'request_id': request_id})
+            # Perform complex actions.
+            return True
+        else:
+            logging.info("Complex rule conditions not met", extra={'request_id': request_id})
+            return False
+
+    def sub1(self, context_dict, key, delete_func, request_id, timeout=10):
+        """Sub-function encapsulating complex operations with rule adherence."""
+        start_time = time.time()
+        try:
+            context = DataContext(**context_dict)  # Validate context
+
+            # Apply rules before operations
+            context_copy = copy.deepcopy(context_dict)
+            logging.info(f"Applying rules to context for sub1: {context_copy}", extra={"request_id": request_id})
+            self._apply_rules(context_copy)
+
+            # Check for rule violations (example: if rules set a flag)
+            if context_copy.get("rule_violation"):
+                logging.error(f"Sub1 aborted due to rule violation. Context after rules: {context_copy}", extra={"request_id": request_id})
+                return False
+
+            if context.encrypt_data:
+                logging.info(f"Sub1 encrypting data: {context.data}", extra={"request_id": request_id})
+                self.encrypt_data(context.data, key, request_id)
+
+            if context.delete_copies:
+                logging.info(f"Sub1 deleting copies", extra={"request_id": request_id})
+                self.delete_inactive_copies_func(delete_func, request_id)
+
+            if context.complex_rule:
+                logging.info(f"Sub1 checking complex rule", extra={"request_id": request_id})
+                self.check_complex_rule(context, request_id)
+
+            if time.time() - start_time > timeout:
+                logging.error(f"Sub1 timed out after {timeout} seconds", extra={'request_id': request_id})
+                return False
+
+            logging.info(f"Sub1 executed successfully", extra={"request_id": request_id})
+            return True
+
+        except ValidationError as e:
+            logging.error(f"Sub1 Validation Error : {e}", extra={'request_id': request_id})
+            return False
+
+        except Exception as e:
+            logging.error(f"Sub1 error: {e}", extra={'request_id': request_id})
+            return False
+        finally:
+            if time.time() - start_time > timeout:
+                logging.error(f"Sub1 timed out after {timeout} seconds, final block", extra={'request_id': request_id})
+                return False
+
+    def run(self):
+        """Runs the Flask application."""
+        if self.config.use_https:
+            self.app.run(host=self.config.host, port=self.config.port, ssl=(self.config.https_cert_path, self.config.https_key_path
+))
+        else:
+            self.app.run(host=self.config.host, port=self.config.port)
+
+if __name__ == "__main__":
+    app = PrimaryDirectives()
+    app.run()
