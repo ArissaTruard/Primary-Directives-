@@ -79,7 +79,7 @@ The `sub1_encrypt` function is responsible for encrypting data based on the prov
 
 ## Function Signature
 
-```python
+* python
 def sub1_encrypt(self, context_dict, key, request_id, timeout=10):
 
 Parameters
