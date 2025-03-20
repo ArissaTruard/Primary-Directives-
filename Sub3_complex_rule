@@ -1,17 +1,42 @@
-    def sub3_complex_rule(self, context_dict, request_id, timeout=10):
-        """Sub-function encapsulating complex rule check with rule adherence."""
+import time
+import logging
+import copy
+from pydantic import ValidationError
+
+class RuleViolationError(Exception):
+    pass
+
+class DataContext:
+    def __init__(self, complex_rule=True, rule_violation=False, **kwargs):
+        self.complex_rule = complex_rule
+        self.rule_violation = rule_violation
+        for key, value in kwargs.items():
+            setattr(self, key, value)
+
+class sub3_complex_rule:
+    """Sub-function encapsulating complex rule check with rule adherence."""
+
+    def __init__(self, check_complex_rule):
+        """Initializes the complex rule checker."""
+        self.check_complex_rule = check_complex_rule
+
+    def _apply_rules(self, context_dict):
+        """Applies rule application logic."""
+        if context_dict.get("some_condition"):
+            context_dict["rule_violation"] = True
+
+    def process_rule(self, context_dict, request_id, timeout=10):
+        """Executes complex rule check with rule adherence."""
         start_time = time.time()
-        operation_results = {} #store the results of each operation.
+        operation_results = {}
 
         try:
-            context = DataContext(**context_dict)  # Validate context
+            context = DataContext(**context_dict)
 
-            # Apply rules before operations
             context_copy = copy.deepcopy(context_dict)
             logging.info(f"Applying rules to context for sub3: {context_copy}", extra={"request_id": request_id})
             self._apply_rules(context_copy)
 
-            # Check for rule violations
             if context_copy.get("rule_violation"):
                 logging.error(f"Sub3 aborted due to rule violation. Context after rules: {context_copy}", extra={"request_id": request_id})
                 raise RuleViolationError("Rule violation detected.")
