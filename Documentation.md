@@ -102,9 +102,9 @@ External Dependencies
  * Cryptography
  * Logging
 
-**3. `sub2_delete` Documentation**
 
-```markdown
+
+
 # sub2_delete Function Documentation
 
 ## Overview
