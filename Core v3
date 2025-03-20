@@ -99,6 +99,10 @@ class Settings(BaseSettings):
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
 
+class RuleViolationError(Exception):
+    """Custom exception for rule violations."""
+    pass
+
 class PrimaryDirectives:
     """Main class for the Primary Directives application (Action Filter)."""
 
@@ -198,7 +202,15 @@ class PrimaryDirectives:
         @self.app.route("/health")
         def health():
             """Health check endpoint."""
-            return jsonify({"status": "healthy"})
+            health_status = {"status": "healthy"}
+            try:
+                with self.Session() as session:
+                    session.execute(func.now())
+                    health_status["database"] = "ok"
+            except Exception as e:
+                health_status["database"] = f"error: {e}"
+
+            return jsonify(health_status)
 
         @self.app.route("/shutdown", methods=["POST"])
         def shutdown():
@@ -206,7 +218,8 @@ class PrimaryDirectives:
             auth_token = request.headers.get("Authorization")
             if auth_token != self.config.authorization_api_token:
                 logger.warning("Unauthorized shutdown attempt.")
-                return jsonify({"error": "Unauthorized"}), 401
+                return jsonify({"error
+": "Unauthorized"}), 401
             logger.info("Secure shutdown initiated.")
             os._exit(0)
 
@@ -214,12 +227,11 @@ class PrimaryDirectives:
         async def execute_sub1():
             """Executes sub1."""
             try:
-                request_data = ProcessRequest
-(**request.get_json())
+                request_data = ProcessRequest(**request.get_json())
                 context_dict = request_data.context
                 request_id = request_data.request_id
 
-                result = self.sub1(context_dict, self.config.encryption_key, self._delete_inactive_copies, request_id, timeout=5)
+                result = self.sub1_encrypt(context_dict, self.config.encryption_key, request_id, timeout=5)
 
                 if result.get('sub1_result') == "success":
                     return jsonify({"status": "sub1 executed successfully", "results": result})
@@ -233,6 +245,54 @@ class PrimaryDirectives:
                 return jsonify({"error": str(e)}), 400
             except Exception as e:
                 self._handle_error(f"Error executing sub1: {e}", request_id=request_id)
+                return jsonify({"error": "Internal Server Error"}), 500
+
+        @self.app.route("/execute_sub2", methods=["POST"])
+        async def execute_sub2():
+            """Executes sub2."""
+            try:
+                request_data = ProcessRequest(**request.get_json())
+                context_dict = request_data.context
+                request_id = request_data.request_id
+
+                result = self.sub2_delete(context_dict, self._delete_inactive_copies, request_id, timeout=5)
+
+                if result.get('sub2_result') == "success":
+                    return jsonify({"status": "sub2 executed successfully", "results": result})
+                elif 'rule_violation' in result.get('sub2_result', ""):
+                    return jsonify({"error": "sub2 execution failed due to rule violation", "results": result}), 403
+                else:
+                    return jsonify({"error": "sub2 execution failed", "results": result}), 500
+
+            except ValidationError as e:
+                logger.warning(f"Validation error: {e}")
+                return jsonify({"error": str(e)}), 400
+            except Exception as e:
+                self._handle_error(f"Error executing sub2: {e}", request_id=request_id)
+                return jsonify({"error": "Internal Server Error"}), 500
+
+        @self.app.route("/execute_sub3", methods=["POST"])
+        async def execute_sub3():
+            """Executes sub3."""
+            try:
+                request_data = ProcessRequest(**request.get_json())
+                context_dict = request_data.context
+                request_id = request_data.request_id
+
+                result = self.sub3_complex_rule(context_dict, request_id, timeout=5)
+
+                if result.get('sub3_result') == "success":
+                    return jsonify({"status": "sub3 executed successfully", "results": result})
+                elif 'rule_violation' in result.get('sub3_result', ""):
+                    return jsonify({"error": "sub3 execution failed due to rule violation", "results": result}), 403
+                else:
+                    return jsonify({"error": "sub3 execution failed", "results": result}), 500
+
+            except ValidationError as e:
+                logger.warning(f"Validation error: {e}")
+                return jsonify({"error": str(e)}), 400
+            except Exception as e:
+                self._handle_error(f"Error executing sub3: {e}", request_id=request_id)
                 return jsonify({"error": "Internal Server Error"}), 500
 
     def _start_metrics_updater(self):
@@ -324,7 +384,8 @@ class PrimaryDirectives:
 
     def encrypt_data(self, data, key, request_id):
         """Encrypts data using the given key."""
-        fernet = Fernet(key.encode())
+        fernet = Fernet(key.encode
+())
         encrypted_data = fernet.encrypt(json.dumps(data).encode())
         logging.info(f"Data encrypted: {encrypted_data}", extra={'request_id': request_id})
         return encrypted_data
@@ -347,8 +408,8 @@ class PrimaryDirectives:
             logging.info("Complex rule conditions not met", extra={'request_id': request_id})
             return False
 
-    def sub1(self, context_dict, key, delete_func, request_id, timeout=10):
-        """Sub-function encapsulating complex operations with rule adherence."""
+    def sub1_encrypt(self, context_dict, key, request_id, timeout=10):
+        """Sub-function encapsulating encryption with rule adherence."""
         start_time = time.time()
         operation_results = {} #store the results of each operation.
 
@@ -380,27 +441,6 @@ class PrimaryDirectives:
                     logging.error(f"Error encrypting data: {e}", extra={"request_id": request_id})
                     operation_results['encrypt_data'] = f"failure: {e}"
 
-            # Delete copies
-            if context
-.delete_copies:
-                try:
-                    logging.info(f"Sub1 deleting copies", extra={"request_id": request_id})
-                    self.delete_inactive_copies_func(delete_func, request_id)
-                    operation_results['delete_copies'] = "success"
-                except Exception as e:
-                    logging.error(f"Error deleting copies: {e}", extra={"request_id": request_id})
-                    operation_results['delete_copies'] = f"failure: {e}"
-
-            # Check complex rule
-            if context.complex_rule:
-                try:
-                    logging.info(f"Sub1 checking complex rule", extra={"request_id": request_id})
-                    self.check_complex_rule(context, request_id)
-                    operation_results['complex_rule'] = "success"
-                except Exception as e:
-                    logging.error(f"Error checking complex rule: {e}", extra={"request_id": request_id})
-                    operation_results['complex_rule'] = f"failure: {e}"
-
             if time.time() - start_time > timeout:
                 logging.error(f"Sub1 timed out after {timeout} seconds", extra={'request_id': request_id})
                 operation_results["timeout"] = "global timeout"
@@ -427,6 +467,119 @@ class PrimaryDirectives:
         finally:
             if time.time() - start_time > timeout:
                 logging.error(f"Sub1 timed out after {timeout} seconds, final block", extra={'request_id': request_id})
+                operation_results["timeout"] = "final block timeout"
+                return operation_results
+
+    def sub2_delete(self, context_dict, delete_func, request_id, timeout=10):
+        """Sub-function encapsulating deletion with rule adherence."""
+        start_time = time.time()
+        operation_results = {} #store the results of each operation.
+
+        try:
+            context = DataContext(**context_dict)  # Validate context
+
+            # Apply rules before operations
+            context_copy = copy.deepcopy(context_dict)
+            logging.info(f"Applying rules to context for sub2: {context_copy}", extra={"request_id": request_id})
+            self._apply_rules(context_copy)
+
+            # Check for rule violations
+            if context_copy.get("rule_violation"):
+                logging.error(f"Sub2 aborted due to rule violation. Context after rules: {context_copy}", extra={"request_id": request_id})
+                raise RuleViolationError("Rule violation detected.")
+
+            if context.delete_copies:
+                try:
+                    logging.info(f"Sub2 deleting copies", extra={"request_id": request_id})
+                    self.delete_inactive_copies_func(delete_func, request_id)
+                    operation_results['delete_copies'] = "success"
+                except Exception as e:
+                    logging.error(f"Error deleting copies: {e}", extra={"request_id": request_id})
+                    operation_results['delete_copies'] = f"failure: {e}"
+
+            if time.time() - start_time > timeout:
+                logging.error(f"Sub2 timed out after {timeout} seconds", extra={'request_id': request_id})
+                operation_results["timeout"] = "global timeout"
+                return operation_results
+
+            logging.info(f"Sub2 executed successfully", extra={"request_id": request_id})
+            operation_results['sub2_result'] = "success"
+            return operation_results
+
+        except ValidationError as e:
+            logging.error(f"Sub2 Validation Error : {e}", extra={'request_id': request_id})
+            operation_results['sub2_result'] = f"validation_error: {e}"
+            return operation_results
+
+        except RuleViolationError as e:
+            operation_results['sub2_result'] = f"rule_violation: {e}"
+            return operation_results
+
+        except Exception as e:
+            logging.error(f"Sub2 error: {e}", extra={'request_id': request_id})
+            operation_results['sub2_result'] = f"general_error: {e}"
+            return operation_results
+
+        finally:
+            if time.time() - start_time > timeout:
+                logging.error(f"Sub2 timed out after {timeout} seconds, final block", extra={'request_id': request_id})
+                operation_results["timeout"] = "final block timeout"
+                return operation_results
+
+    def sub3_complex_rule(self, context_dict, request_id, timeout=10):
+        """Sub-function encapsulating complex rule check with rule adherence."""
+        start_time = time.time()
+        operation_results = {} #store the results of each operation.
+
+        try:
+            context = DataContext(**context_dict)  # Validate context
+
+            # Apply rules before operations
+            context_copy = copy.deepcopy(context_dict)
+            logging.info(f"Applying rules to context for sub3: {context_copy}", extra={"request_id": request_id})
+            self._apply_rules(context_copy)
+
+            # Check for rule violations
+            if context_copy.get("rule_violation"):
+                logging.error(f"Sub3 aborted due to rule violation. Context after rules: {context_copy}", extra={"request_id": request_id})
+                raise RuleViolationError("Rule violation detected.")
+
+            if context.complex_rule:
+                try:
+                    logging.info(f"Sub3 checking complex rule", extra={"request_id": request_id})
+                    self.check_complex_rule(context, request_id)
+                    operation_results['complex_rule'] = "success"
+                except Exception as e:
+                    logging.error(f"Error checking complex rule: {e}", extra={"request_id": request_id})
+                    operation_results['complex_rule'] = f"failure: {e}"
+
+            if time.time() - start_time > timeout:
+                logging.error(f"Sub3 timed out after {timeout} seconds", extra={'request_id': request_id})
+                operation_results["timeout"] = "global timeout"
+                return operation_results
+
+            logging.
+info(f"Sub3 executed successfully", extra={"request_id": request_id})
+            operation_results['sub3_result'] = "success"
+            return operation_results
+
+        except ValidationError as e:
+            logging.error(f"Sub3 Validation Error : {e}", extra={'request_id': request_id})
+            operation_results['sub3_result'] = f"validation_error: {e}"
+            return operation_results
+
+        except RuleViolationError as e:
+            operation_results['sub3_result'] = f"rule_violation: {e}"
+            return operation_results
+
+        except Exception as e:
+            logging.error(f"Sub3 error: {e}", extra={'request_id': request_id})
+            operation_results['sub3_result'] = f"general_error: {e}"
+            return operation_results
+
+        finally:
+            if time.time() - start_time > timeout:
+                logging.error(f"Sub3 timed out after {timeout} seconds, final block", extra={'request_id': request_id})
                 operation_results["timeout"] = "final block timeout"
                 return operation_results
 
