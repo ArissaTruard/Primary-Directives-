@@ -135,9 +135,7 @@ External Dependencies
  * Pydantic
  * Logging
 
-**4. `sub3_complex_rule` Documentation**
 
-```markdown
 # sub3_complex_rule Function Documentation
 
 ## Overview
