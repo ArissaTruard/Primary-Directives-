@@ -1,79 +1,99 @@
-import time
+"""
+Sub2_delete Module
+
+This module provides functions for deleting files and directories, both individually
+and based on filename patterns. It includes error handling and integrates with an
+alerting system for notifications in case of failures.
+
+Functions:
+    delete_files(file_paths, alertmanager_url=None): Deletes specified files or directories.
+    delete_files_by_pattern(directory, pattern, alertmanager_url=None): Deletes files matching a pattern.
+"""
+
 import logging
-import copy
-from pydantic import ValidationError
+import os
+import shutil
 
-class RuleViolationError(Exception):
-    pass
+from sub_system import shutdown
 
-class DataContext:
-    def __init__(self, delete_copies=True, rule_violation=False, **kwargs):
-        self.delete_copies = delete_copies
-        self.rule_violation = rule_violation
-        for key, value in kwargs.items():
-            setattr(self, key, value)
+def delete_files(file_paths, alertmanager_url=None):
+    """
+    Deletes specified files or directories.
 
-class sub2_delete:
-    """Sub-function encapsulating deletion with rule adherence."""
+    Args:
+        file_paths (list): A list of file or directory paths to delete.
+        alertmanager_url (str, optional): URL of Alertmanager for notifications. Defaults to None.
 
-    def __init__(self, delete_inactive_copies_func):
-        self.delete_inactive_copies_func = delete_inactive_copies_func
-
-    def _apply_rules(self, context_dict):
-        """Implement your rule application logic here."""
-        if context_dict.get("some_condition"):
-            context_dict["rule_violation"] = True
-
-    def delete(self, context_dict, request_id, timeout=10):
-        """Executes deletion with rule adherence."""
-        start_time = time.time()
-        operation_results = {}
-
+    Raises:
+        Exception: If an error occurs during deletion, logs the error and triggers a shutdown.
+    """
+    for path in file_paths:
         try:
-            context = DataContext(**context_dict)
-
-            context_copy = copy.deepcopy(context_dict)
-            logging.info(f"Applying rules to context for sub2: {context_copy}", extra={"request_id": request_id})
-            self._apply_rules(context_copy)
-
-            if context_copy.get("rule_violation"):
-                logging.error(f"Sub2 aborted due to rule violation. Context after rules: {context_copy}", extra={"request_id": request_id})
-                raise RuleViolationError("Rule violation detected.")
-
-            if context.delete_copies:
-                try:
-                    logging.info(f"Sub2 deleting copies", extra={"request_id": request_id})
-                    self.delete_inactive_copies_func(request_id) #delete_func argument removed.
-                    operation_results['delete_copies'] = "success"
-                except Exception as e:
-                    logging.error(f"Error deleting copies: {e}", extra={"request_id": request_id})
-                    operation_results['delete_copies'] = f"failure: {e}"
-
-            if time.time() - start_time > timeout:
-                logging.error(f"Sub2 timed out after {timeout} seconds", extra={'request_id': request_id})
-                operation_results["timeout"] = "global timeout"
-                return operation_results
-
-            logging.info(f"Sub2 executed successfully", extra={"request_id": request_id})
-            operation_results['sub2_result'] = "success"
-            return operation_results
-
-        except ValidationError as e:
-            logging.error(f"Sub2 Validation Error : {e}", extra={'request_id': request_id})
-            operation_results['sub2_result'] = f"validation_error: {e}"
-            return operation_results
-
-        except RuleViolationError as e:
-            operation_results['sub2_result'] = f"rule_violation: {e}"
-            return operation_results
-
+            if os.path.exists(path):
+                if os.path.isfile(path):
+                    os.remove(path)
+                    logging.info(f"File deleted: {path}")
+                elif os.path.isdir(path):
+                    shutil.rmtree(path)
+                    logging.info(f"Directory deleted: {path}")
+                else:
+                    logging.warning(f"Path is neither a file nor a directory: {path}")
+            else:
+                logging.warning(f"Path does not exist: {path}")
         except Exception as e:
-            logging.error(f"Sub2 error: {e}", extra={'request_id': request_id})
-            operation_results['sub2_result'] = f"general_error: {e}"
-            return operation_results
+            logging.error(f"Error deleting {path}: {e}")
+            shutdown(f"Error deleting {path}: {e}", alertmanager_url, severity="error", grouping_key="file_deletion")
 
-        finally:
-            if time.time() - start_time > timeout:
-                logging.error(f"Sub2 timed out after {timeout} seconds, final block", extra={'request_id': request_id})
-                operation_results["timeout"] = "final block timeout"
-                return operation_results
+def delete_files_by_pattern(directory, pattern, alertmanager_url=None):
+    """
+    Deletes files in a directory that match a given pattern.
+
+    Args:
+        directory (str): The directory to search for files.
+        pattern (str): The pattern to match filenames against.
+        alertmanager_url (str, optional): URL of Alertmanager for notifications. Defaults to None.
+
+    Raises:
+        Exception: If an error occurs during deletion, logs the error and triggers a shutdown.
+    """
+    try:
+        if not os.path.exists(directory):
+            logging.warning(f"Directory does not exist: {directory}")
+            return
+
+        for filename in os.listdir(directory):
+            if pattern in filename:
+                file_path = os.path.join(directory, filename)
+                if os.path.isfile(file_path):
+                    os.remove(file_path)
+                    logging.info(f"File deleted: {file_path}")
+                else:
+                    logging.warning(f"Matched item is not a file: {file_path}")
+    except Exception as e:
+        logging.error(f"Error deleting files in {directory}: {e}")
+        shutdown(f"Error deleting files in {directory}: {e}", alertmanager_url, severity="error", grouping_key="file_pattern_deletion")
+
+if __name__ == "__main__":
+    # Example usage (for testing purposes)
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
+
+    # Example 1: Deleting specific files/directories
+    files_to_delete = ["test_file.txt", "test_directory"]
+    for file in files_to_delete:
+        if not os.path.exists(file):
+            open(file,'a').close()
+
+    if not os.path.exists("test_directory"):
+        os.makedirs("test_directory")
+
+    delete_files(files_to_delete)
+
+    # Example 2: Deleting files by pattern
+    if not os.path.exists("test_pattern_dir"):
+        os.makedirs("test_pattern_dir")
+
+    for i in range(5):
+        with open(f"test_pattern_dir/file_{i}_pattern.txt", "w") as f:
+            f.write("test content")
+
+    delete_files_by_pattern("test_pattern_dir", "pattern")
