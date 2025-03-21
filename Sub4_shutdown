@@ -1,3 +1,14 @@
+"""
+Sub4_shutdown Module
+
+This module provides a function to trigger alert notifications and initiate a system shutdown.
+It logs critical messages, sends alerts to Alertmanager (if configured), and attempts
+to shut down the system based on the operating system.
+
+Functions:
+    sub4_shutdown(message, alertmanager_url=None): Triggers an alert and initiates shutdown.
+"""
+
 import logging
 import os
 import platform
@@ -10,6 +21,11 @@ def sub4_shutdown(message, alertmanager_url=None):
         message (str): The message to log and send as an alert.
         alertmanager_url (str, optional): The URL of the Alertmanager instance.
             Defaults to None.
+
+    Raises:
+        ImportError: If the httpx library is not found.
+        httpx.HTTPStatusError: If sending the alert to Alertmanager fails.
+        Exception: For unexpected errors during alert sending or shutdown.
     """
     logging.critical(message)
 
