@@ -1,212 +1,88 @@
+"""
+Sub_task_queue Module
+
+This module provides a TaskQueue class for managing and executing asynchronous tasks.
+
+Classes:
+    TaskQueue: Manages and executes asynchronous tasks.
+"""
+
+import asyncio
 import logging
-import threading
-import time
-import random
-import queue
+from collections import deque
 
-class task_queue:
+class TaskQueue:
     """
-    Implements a task queue with worker threads.
+    Manages and executes asynchronous tasks.
+
+    Attributes:
+        queue (deque): A deque to store tasks.
+        max_size (int): The maximum size of the queue.
+        running (bool): Indicates if the queue is running.
     """
 
-    def __init__(self, num_workers=4):
+    def __init__(self, max_size=100):
         """
-        Initializes the task queue.
+        Initializes the TaskQueue.
 
         Args:
-            num_workers (int, optional): The number of worker threads. Defaults to 4.
+            max_size (int, optional): The maximum size of the queue. Defaults to 100.
         """
-        self.task_queue = queue.Queue()
-        self.workers = []
-        self.num_workers = num_workers
-        self.start_workers()
+        self.queue = deque()
+        self.max_size = max_size
+        self.running = False
 
-    def start_workers(self):
+    def add_task(self, task):
         """
-        Starts the worker threads.
-        """
-        for _ in range(self.num_workers):
-            worker = threading.Thread(target=self.worker_loop)
-            worker.daemon = True
-            self.workers.append(worker)
-            worker.start()
+        Adds a task to the queue.
 
-    def worker_loop(self):
+        Args:
+            task (callable): The asynchronous task to add.
+
+        Raises:
+            ValueError: If the queue is full.
         """
-        The worker thread loop.
+        if len(self.queue) < self.max_size:
+            self.queue.append(task)
+            if not self.running:
+                asyncio.create_task(self._process_tasks())
+        else:
+            raise ValueError("Task queue is full.")
+
+    async def _process_tasks(self):
         """
-        while True:
-            task = self.task_queue.get()
-            if task is None:  # Sentinel value to stop workers
-                break
+        Processes tasks from the queue.
+        """
+        self.running = True
+        while self.queue:
+            task = self.queue.popleft()
             try:
-                task()
+                await task()
             except Exception as e:
-                logging.error(f"Task execution failed: {e}")
-            self.task_queue.task_done()
+                logging.error(f"Error processing task: {e}")
+        self.running = False
 
-    def enqueue_task(self, task):
+    async def wait_for_completion(self):
         """
-        Enqueues a task.
-
-        Args:
-            task (callable): The task to enqueue.
+        Waits for all tasks in the queue to complete.
         """
-        self.task_queue.put(task)
+        while self.running or self.queue:
+            await asyncio.sleep(0.1)  # Small delay to avoid busy-waiting
 
-    def stop_workers(self):
-        """
-        Stops all worker threads.
-        """
-        for _ in range(self.num_workers):
-            self.task_queue.put(None)  # Add sentinel values to stop workers
-        for worker in self.workers:
-            worker.join()
+if __name__ == "__main__":
+    # Example usage
+    async def my_task(task_id):
+        logging.info(f"Task {task_id} started.")
+        await asyncio.sleep(1)  # Simulate some async work
+        logging.info(f"Task {task_id} completed.")
 
-    def wait_for_completion(self):
-        """
-        Waits for all tasks to complete.
-        """
-        self.task_queue.join()
+    async def main():
+        queue = TaskQueue(max_size=5)
+        for i in range(3):
+            queue.add_task(my_task(i))
 
-class task_queue_with_retry:
-    """
-    Implements a task queue with retry mechanism for failed tasks.
-    """
+        await queue.wait_for_completion()
+        logging.info("All tasks completed.")
 
-    def __init__(self, num_workers=4, max_retries=3, base_delay=1, max_delay=10, jitter=True):
-        """
-        Initializes the task queue with retry.
-
-        Args:
-            num_workers (int, optional): Number of worker threads. Defaults to 4.
-            max_retries (int, optional): Max retry attempts. Defaults to 3.
-            base_delay (int, optional): Initial retry delay. Defaults to 1.
-            max_delay (int, optional): Max retry delay. Defaults to 10.
-            jitter (bool, optional): Add jitter to delay. Defaults to True.
-        """
-        self.num_workers = num_workers
-        self.max_retries = max_retries
-        self.base_delay = base_delay
-        self.max_delay = max_delay
-        self.jitter = jitter
-        self.task_queue = queue.Queue()
-        self.workers = []
-        self.start_workers()
-
-    def start_workers(self):
-        """Starts worker threads."""
-        for _ in range(self.num_workers):
-            worker = threading.Thread(target=self.worker_loop)
-            worker.daemon = True
-            self.workers.append(worker)
-            worker.start()
-
-    def worker_loop(self):
-        """Worker thread loop with retry logic."""
-        while True:
-            task, args, kwargs, retries = self.task_queue.get()
-            if task is None:
-                break
-
-            try:
-                task(*args, **kwargs)
-                self.task_queue.task_done()
-            except Exception as e:
-                logging.error(f"Task failed (retry {retries}/{self.max_retries}): {e}")
-                if retries < self.max_retries:
-                    delay = min(self.base_delay * (2 ** retries), self.max_delay)
-                    if self.jitter:
-                        delay = random.uniform(0, delay)
-                    time.sleep(delay)
-                    self.task_queue.put((task, args, kwargs, retries + 1))  # Re-enqueue with increased retry count
-                else:
-                    logging.error(f"Task failed after {self.max_retries} retries: {e}")
-                    self.task_queue.task_done()
-
-    def enqueue_task(self, task, *args, **kwargs):
-        """Enqueues a task with initial retry count."""
-        self.task_queue.put((task, args, kwargs, 0))  # Initial retry count is 0
-
-    def stop_workers(self):
-        """Stops worker threads."""
-        for _ in range(self.num_workers):
-            self.task_queue.put((None, None, None, None))
-        for worker in self.workers:
-            worker.join()
-
-    def wait_for_completion(self):
-        """Waits for all tasks to complete."""
-        self.task_queue.join()
-
-class bounded_task_queue_with_retry:
-    """
-    Implements a bounded task queue with retry mechanism for failed tasks.
-    """
-
-    def __init__(self, num_workers=4, max_queue_size=10, max_retries=3, base_delay=1, max_delay=10, jitter=True):
-        """
-        Initializes the bounded task queue with retry.
-
-        Args:
-            num_workers (int, optional): Number of worker threads. Defaults to 4.
-            max_queue_size (int, optional): Maximum task queue size. Defaults to 10.
-            max_retries (int, optional): Max retry attempts. Defaults to 3.
-            base_delay (int, optional): Initial retry delay. Defaults to 1.
-            max_delay (int, optional): Max retry delay. Defaults to 10.
-            jitter (bool, optional): Add jitter to delay. Defaults to True.
-        """
-        self.num_workers = num_workers
-        self.max_queue_size = max_queue_size
-        self.max_retries = max_retries
-        self.base_delay = base_delay
-        self.max_delay = max_delay
-        self.jitter = jitter
-        self.task_queue = queue.Queue(maxsize=max_queue_size)
-        self.workers = []
-        self.start_workers()
-
-    def start_workers(self):
-        """Starts worker threads."""
-        for _ in range(self.num_workers):
-            worker = threading.Thread(target=self.worker_loop)
-            worker.daemon = True
-            self.workers.append(worker)
-            worker.start()
-
-    def worker_loop(self):
-        """Worker thread loop with retry logic."""
-        while True:
-            task, args, kwargs, retries = self.task_queue.get()
-            if task is None:
-                break
-
-            try:
-                task(*args, **kwargs)
-                self.task_queue.task_done()
-            except Exception as e:
-                logging.error(f"Task failed (retry {retries}/{self.max_retries}): {e}")
-                if retries < self.max_retries:
-                    delay = min(self.base_delay * (2 ** retries), self.max_delay)
-                    if self.jitter:
-                        delay = random.uniform(0, delay)
-                    time.sleep(delay)
-                    self.task_queue.put((task, args, kwargs, retries + 1))  # Re-enqueue with increased retry count
-                else:
-                    logging.error(f"Task failed after {self.max_retries} retries: {e}")
-                    self.task_queue.task_done()
-
-    def enqueue_task(self, task, *args, **kwargs):
-        """Enqueues a task with initial retry count, blocking if queue is full."""
-        self.task_queue.put((task, args, kwargs, 0))  # Initial retry count is 0
-
-    def stop_workers(self):
-        """Stops worker threads."""
-        for _ in range(self.num_workers):
-            self.task_queue.put((None, None, None, None))
-        for worker in self.workers:
-            worker.join()
-
-    def wait_for_completion(self):
-        """Waits for all tasks to complete."""
-        self.task_queue.join()
+    logging.basicConfig(level=logging.INFO)
+    asyncio.run(main())
