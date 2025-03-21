@@ -1,71 +1,57 @@
+"""
+Sub_periodic_task Module
+
+This module provides a decorator for running functions periodically.
+
+Classes:
+    periodic_task: A decorator for running functions periodically.
+
+Functions:
+    periodic_task(interval): Decorator to run a function periodically.
+"""
+
+import asyncio
 import logging
-import threading
-import time
+from functools import wraps
 
-class periodic_task:
+def periodic_task(interval):
     """
-    Executes a task periodically in a separate thread.
+    Decorator to run a function periodically.
+
+    Args:
+        interval (int): The interval in seconds to run the function.
+
+    Returns:
+        callable: The decorated function.
     """
+    def decorator(func):
+        @wraps(func)
+        async def wrapper(*args, **kwargs):
+            async def periodic_runner():
+                while True:
+                    try:
+                        await func(*args, **kwargs)
+                    except Exception as e:
+                        logging.error(f"Error in periodic task {func.__name__}: {e}")
+                    await asyncio.sleep(interval)
 
-    def __init__(self, task, interval, initial_delay=0):
-        """
-        Initializes the periodic task.
+            asyncio.create_task(periodic_runner())
+            return func  # Return the original function for other purposes
 
-        Args:
-            task (callable): The task to execute periodically.
-            interval (float): The interval in seconds between task executions.
-            initial_delay (float, optional): The initial delay in seconds before the first execution. Defaults to 0.
-        """
-        self.task = task
-        self.interval = interval
-        self.initial_delay = initial_delay
-        self.thread = None
-        self.running = False
+        return wrapper
 
-    def start(self):
-        """
-        Starts the periodic task thread.
-        """
-        if self.running:
-            return  # Already running
+    return decorator
 
-        self.running = True
-        self.thread = threading.Thread(target=self.run)
-        self.thread.daemon = True
-        self.thread.start()
+if __name__ == "__main__":
+    # Example usage
+    @periodic_task(interval=5)
+    async def my_periodic_task():
+        logging.info("Periodic task executed.")
 
-    def run(self):
-        """
-        The main loop for the periodic task thread.
-        """
-        if self.initial_delay > 0:
-            time.sleep(self.initial_delay)
+    async def main():
+        # Simulate some other async operations
+        await asyncio.sleep(15)
+        logging.info("Main task finished.")
 
-        while self.running:
-            try:
-                self.task()
-            except Exception as e:
-                logging.error(f"Periodic task failed: {e}")
-
-            if not self.running:
-                break
-            time.sleep(self.interval)
-
-    def stop(self):
-        """
-        Stops the periodic task thread.
-        """
-        if self.running:
-            self.running = False
-            if self.thread and self.thread.is_alive():
-                self.thread.join()
-            self.thread = None
-
-    def is_running(self):
-        """
-        Checks if the periodic task is running.
-
-        Returns:
-            bool: True if the task is running, False otherwise.
-        """
-        return self.running
+    logging.basicConfig(level=logging.INFO)
+    asyncio.run(main())
