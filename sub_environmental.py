@@ -1,106 +1,59 @@
 # --- sub_environmental.py ---
+import logging
 import datetime
-import logging
-import sub_radiation
+import requests
+import json
+from .air_quality_monitor import monitor_air_quality, get_weather_data
+from .water_quality_monitor import monitor_water_quality
+from .soil_quality_monitor import monitor_soil_quality
+from .noise_monitor import monitor_noise_levels
+from .seismic_monitor import monitor_seismic_activity
 
-# Configuration Dictionaries (Move outside the function for efficiency)
-TOLERANCES = {
-    "temperature": 20,  # Degrees Celsius (comfortable spring)
-    "humidity": 50,     # Percentage (comfortable spring)
-    "uv_index": 4,      # Moderate UV index
-    "allergen_density": 2, # Low allergen levels
-    "air_quality": 30,  # Good air quality (AQI)
-    "smog_level": 50,
-}
-
-CONDITIONS = {
-    "temperature": {
-        "high": {"threshold": TOLERANCES["temperature"] + 5, "warning": "High temperature detected.", "ppe": "Hydration, light clothing, wide-brimmed hat."},
-        "low": {"threshold": TOLERANCES["temperature"] - 10, "warning": "Low temperature detected.", "ppe": "Insulated clothing, layers, gloves, hat."},
-    },
-    "humidity": {
-        "high": {"threshold": TOLERANCES["humidity"] + 25, "warning": "High humidity detected.", "ppe": "Breathable clothing, moisture-wicking fabrics."},
-        "low": {"threshold": TOLERANCES["humidity"] - 25, "warning": "Low humidity detected.", "ppe": "Moisturizer, lip balm, increased hydration."},
-    },
-    "uv_index": {"high": {"threshold": TOLERANCES["uv_index"] + 3, "warning": "High UV index detected.", "ppe": "Sunscreen, sunglasses, long sleeves, hat."}},
-    "allergen_density": {"high": {"threshold": TOLERANCES["allergen_density"] + 3, "warning": "High allergen density detected.", "ppe": "Mask, allergy medication, eye protection."}},
-    "air_quality": {"high": {"threshold": TOLERANCES["air_quality"] + 70, "warning": "Poor air quality detected.", "ppe": "N95 mask, avoid strenuous activity."}},
-    "smog_level": {"high": {"threshold": TOLERANCES["smog_level"], "warning": "High smog level detected.", "ppe": "Mask, limit outdoor exposure."}},
-    "weather_overall": {"severe": {"threshold": "severe", "warning": "Severe weather conditions.", "ppe": "Seek shelter, appropriate weather gear."}},
-}
-
-def _check_condition(factor, data, conditions):
-    """Internal function to check a single environmental condition."""
-    if data is not None and factor in conditions:
-        if isinstance(data, (int, float)):
-            if data > conditions[factor]["high"]["threshold"]:
-                return conditions[factor]["high"]["warning"], conditions[factor]["high"]["ppe"]
-            elif factor in ("temperature", "humidity") and data < conditions[factor]["low"]["threshold"]:
-                return conditions[factor]["low"]["warning"], conditions[factor]["low"]["ppe"]
-        elif isinstance(data, str) and factor == "weather_overall" and conditions[factor]["severe"]["threshold"] in data.lower():
-            return conditions[factor]["severe"]["warning"], conditions[factor]["severe"]["ppe"]
-    return None, None
-
-def assess_environment(environmental_data):
+def monitor_environment(location, air_data=None, water_data=None, soil_data=None, noise_level=None, seismic_data=None, weather_api_key=None):
     """
-    Assesses environmental factors with improved clarity and context, suggesting appropriate PPE.
+    Monitors and analyzes environmental data, integrating various sensors.
+
+    Args:
+        location (str): Location of the environmental measurement.
+        air_data (dict, optional): Air quality data.
+        water_data (dict, optional): Water quality data.
+        soil_data (dict, optional): Soil quality data.
+        noise_level (float, optional): Noise level in dB.
+        seismic_data (float, optional): Ground movement data.
+        weather_api_key (str, optional): API key for weather data.
+
+    Returns:
+        dict: A dictionary containing the analysis results.
     """
-    safety_warnings = []
-    ppe_suggestions = []
-    environmental_log = environmental_data.copy() # copy to avoid changing input data
+    timestamp = datetime.datetime.now()
+    logging.info(f"Environmental monitoring at {location} - {timestamp}")
 
-    try:
-        for factor, data in environmental_data.items():
-            if factor == "radiation_level":
-                warning, ppe = sub_radiation.assess_radiation(data)
-                if warning:
-                    safety_warnings.append(warning)
-                    ppe_suggestions.append(ppe)
-            else:
-                warning, ppe = _check_condition(factor, data, CONDITIONS)
-                if warning:
-                    safety_warnings.append(warning)
-                    ppe_suggestions.append(ppe)
+    analysis_results = {}
 
-        environmental_log["status"] = "Environment safe." if not safety_warnings else "Environment unsafe."
+    if air_data:
+        air_results = monitor_air_quality(air_data.get('pm25'), air_data.get('pm10'), air_data.get('vocs'),
+                                          air_data.get('o3'), air_data.get('no2'), air_data.get('so2'),
+                                          air_data.get('co'), location, weather_api_key)
+        analysis_results['air_quality'] = air_results
 
-    except Exception as e:
-        log_event(f"Error in assess_environment: {e}")
-        environmental_log["error"] = str(e)
+    if water_data:
+        water_results = monitor_water_quality(water_data.get('ph'), water_data.get('turbidity'),
+                                              water_data.get('dissolved_oxygen'), water_data.get('heavy_metals'),
+                                              water_data.get('pollutants'), location)
+        analysis_results['water_quality'] = water_results
 
-    return safety_warnings, ppe_suggestions, environmental_log
+    if soil_data:
+        soil_results = monitor_soil_quality(soil_data.get('ph'), soil_data.get('moisture'),
+                                            soil_data.get('nutrients'), soil_data.get('heavy_metals'),
+                                            soil_data.get('pesticides'), location)
+        analysis_results['soil_quality'] = soil_results
 
-def log_event(event):
-    """Logs an event with detailed error handling."""
-    try:
-        timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        with open("system_directives_log.txt", "a") as f:
-            f.write(f"{timestamp}: {event}\n")
-    except Exception as e:
-        print(f"Error logging event: {e}")
-        try:
-            timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            with open("system_directives_log.txt", "a") as f:
-                f.write(f"{timestamp}: Logging error: {e}\n")
-        except:
-            print("Double logging error. Logging system critical failure.")
+    if noise_level is not None:
+        noise_results = monitor_noise_levels(noise_level, location)
+        analysis_results['noise_level'] = noise_results
 
-# --- sub_radiation.py ---
-import logging
+    if seismic_data is not None:
+        seismic_results = monitor_seismic_activity(seismic_data, location)
+        analysis_results['seismic_activity'] = seismic_results
 
-RADIATION_LEVELS = {
-    "elevated": {"threshold": 0.001, "warning": "Elevated radiation detected.", "ppe": "Lead shielding, limit exposure."},
-    "significant": {"threshold": 0.1, "warning": "Significant radiation detected.", "ppe": "Full body radiation suit, potassium iodide."},
-    "lethal": {"threshold": 1, "warning": "Lethal radiation detected.", "ppe": "Immediate evacuation, maximum shielding."},
-}
-
-def assess_radiation(radiation_level):
-    """Assesses radiation levels and returns warnings and PPE suggestions."""
-    if radiation_level is not None:
-        if radiation_level > RADIATION_LEVELS["lethal"]["threshold"]:
-            return RADIATION_LEVELS["lethal"]["warning"], RADIATION_LEVELS["lethal"]["ppe"]
-        elif radiation_level > RADIATION_LEVELS["significant"]["threshold"]:
-            return RADIATION_LEVELS["significant"]["warning"], RADIATION_LEVELS["significant"]["ppe"]
-        elif radiation_level > RADIATION_LEVELS["elevated"]["threshold"]:
-            return RADIATION_LEVELS["elevated"]["warning"], RADIATION_LEVELS["elevated"]["ppe"]
-    return None, None
+    return analysis_results
