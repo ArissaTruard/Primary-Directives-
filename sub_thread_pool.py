@@ -1,207 +1,104 @@
+"""
+Sub_thread_pool Module
+
+This module provides a ThreadPool class for managing and executing tasks using a pool of threads.
+
+Classes:
+    ThreadPool: Manages and executes tasks using a pool of threads.
+"""
+
 import logging
 import threading
+import queue
 import time
 
-class thread_pool:
+class ThreadPool:
     """
-    Implements a thread pool with a fixed number of worker threads.
+    Manages and executes tasks using a pool of threads.
+
+    Attributes:
+        num_threads (int): The number of threads in the pool.
+        task_queue (queue.Queue): A queue to store tasks.
+        threads (list): A list of threads in the pool.
+        running (bool): Indicates if the thread pool is running.
     """
 
-    def __init__(self, num_threads=4):
+    def __init__(self, num_threads=5):
         """
-        Initializes the thread pool.
+        Initializes the ThreadPool.
 
         Args:
-            num_threads (int, optional): The number of worker threads in the pool. Defaults to 4.
+            num_threads (int, optional): The number of threads in the pool. Defaults to 5.
         """
         self.num_threads = num_threads
-        self.tasks = []
-        self.results = []
+        self.task_queue = queue.Queue()
         self.threads = []
-        self.lock = threading.Lock()
-        self.condition = threading.Condition(self.lock)
         self.running = True
-        self.create_threads()
+        self._create_threads()
 
-    def create_threads(self):
+    def _create_threads(self):
         """
-        Creates and starts the worker threads.
+        Creates and starts the threads in the pool.
         """
         for _ in range(self.num_threads):
-            thread = threading.Thread(target=self.worker)
-            thread.daemon = True
+            thread = threading.Thread(target=self._worker)
+            thread.daemon = True  # Allow program to exit even if threads are running
             self.threads.append(thread)
             thread.start()
 
-    def worker(self):
+    def _worker(self):
         """
-        The worker thread loop.
+        Worker function that executes tasks from the queue.
         """
-        with self.condition:
-            while self.running:
-                if not self.tasks:
-                    self.condition.wait()  # Wait for tasks
-                if not self.running:
-                    break
-                if self.tasks:
-                    task, args, kwargs = self.tasks.pop(0)
-                    try:
-                        result = task(*args, **kwargs)
-                        with self.lock:
-                            self.results.append(result)
-                    except Exception as e:
-                        logging.error(f"Task execution failed: {e}")
+        while self.running:
+            try:
+                task, args, kwargs = self.task_queue.get(timeout=1)  # Timeout to allow checking self.running
+                try:
+                    task(*args, **kwargs)
+                except Exception as e:
+                    logging.error(f"Error executing task: {e}")
+                self.task_queue.task_done()
+            except queue.Empty:
+                pass  # No task available, check if pool should stop
 
     def submit(self, task, *args, **kwargs):
         """
-        Submits a task to the thread pool.
+        Submits a task to the queue for execution.
 
         Args:
             task (callable): The task to execute.
             *args: Positional arguments for the task.
             **kwargs: Keyword arguments for the task.
         """
-        with self.condition:
-            self.tasks.append((task, args, kwargs))
-            self.condition.notify()  # Notify a waiting thread
+        self.task_queue.put((task, args, kwargs))
 
-    def get_results(self):
+    def wait_completion(self):
         """
-        Gets the results of the executed tasks.
-
-        Returns:
-            list: A list of results.
+        Waits for all tasks in the queue to complete.
         """
-        with self.lock:
-            results = self.results[:] #create a copy.
-            self.results.clear()
-            return results
+        self.task_queue.join()
 
-    def shutdown(self, wait=True):
+    def stop(self):
         """
-        Shuts down the thread pool.
-
-        Args:
-            wait (bool, optional): Whether to wait for tasks to complete. Defaults to True.
+        Stops the thread pool and waits for all threads to finish.
         """
-        with self.condition:
-            self.running = False
-            self.condition.notify_all()  # Notify all waiting threads
+        self.running = False
+        for thread in self.threads:
+            thread.join()
 
-        if wait:
-            for thread in self.threads:
-                thread.join()
+if __name__ == "__main__":
+    # Example usage
+    def my_task(task_id):
+        logging.info(f"Task {task_id} started.")
+        time.sleep(1)  # Simulate some work
+        logging.info(f"Task {task_id} completed.")
 
-    def wait_for_completion(self):
-        """
-        Waits for all tasks to complete.
-        """
-        with self.condition:
-            while self.tasks:
-                self.condition.wait()
+    logging.basicConfig(level=logging.INFO)
+    pool = ThreadPool(num_threads=3)
 
-class bounded_thread_pool:
-    """
-    Implements a bounded thread pool with a fixed number of worker threads and a task queue.
-    """
+    for i in range(5):
+        pool.submit(my_task, i)
 
-    def __init__(self, num_threads=4, max_queue_size=10):
-        """
-        Initializes the bounded thread pool.
-
-        Args:
-            num_threads (int, optional): The number of worker threads in the pool. Defaults to 4.
-            max_queue_size (int, optional): The maximum number of tasks allowed in the queue. Defaults to 10.
-        """
-        self.num_threads = num_threads
-        self.max_queue_size = max_queue_size
-        self.tasks = []
-        self.results = []
-        self.threads = []
-        self.lock = threading.Lock()
-        self.condition = threading.Condition(self.lock)
-        self.running = True
-        self.create_threads()
-
-    def create_threads(self):
-        """
-        Creates and starts the worker threads.
-        """
-        for _ in range(self.num_threads):
-            thread = threading.Thread(target=self.worker)
-            thread.daemon = True
-            self.threads.append(thread)
-            thread.start()
-
-    def worker(self):
-        """
-        The worker thread loop.
-        """
-        with self.condition:
-            while self.running:
-                if not self.tasks:
-                    self.condition.wait()  # Wait for tasks
-                if not self.running:
-                    break
-                if self.tasks:
-                    task, args, kwargs = self.tasks.pop(0)
-                    try:
-                        result = task(*args, **kwargs)
-                        with self.lock:
-                            self.results.append(result)
-                    except Exception as e:
-                        logging.error(f"Task execution failed: {e}")
-
-    def submit(self, task, *args, **kwargs):
-        """
-        Submits a task to the thread pool, blocking if the queue is full.
-
-        Args:
-            task (callable): The task to execute.
-            *args: Positional arguments for the task.
-            **kwargs: Keyword arguments for the task.
-        """
-        with self.condition:
-            while len(self.tasks) >= self.max_queue_size and self.running:
-                self.condition.wait()  # Wait for space in the queue
-
-            if not self.running:
-                return  # Don't add tasks if shutting down
-
-            self.tasks.append((task, args, kwargs))
-            self.condition.notify()  # Notify a waiting thread
-
-    def get_results(self):
-        """
-        Gets the results of the executed tasks.
-
-        Returns:
-            list: A list of results.
-        """
-        with self.lock:
-            results = self.results[:]
-            self.results.clear()
-            return results
-
-    def shutdown(self, wait=True):
-        """
-        Shuts down the thread pool.
-
-        Args:
-            wait (bool, optional): Whether to wait for tasks to complete. Defaults to True.
-        """
-        with self.condition:
-            self.running = False
-            self.condition.notify_all()  # Notify all waiting threads
-
-        if wait:
-            for thread in self.threads:
-                thread.join()
-
-    def wait_for_completion(self):
-        """
-        Waits for all tasks to complete.
-        """
-        with self.condition:
-            while self.tasks:
-                self.condition.wait()
+    pool.wait_completion()
+    pool.stop()
+    logging.info("All tasks completed.")
