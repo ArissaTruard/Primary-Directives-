@@ -1,0 +1,20 @@
+CONDITIONS = {
+    "temperature": {
+        "high": {"threshold": TOLERANCES["temperature"] + 5, "warning": "High temperature detected.", "ppe": "Hydration, light clothing, wide-brimmed hat."},
+        "low": {"threshold": TOLERANCES["temperature"] - 10, "warning": "Low temperature detected.", "ppe": "Insulated clothing, layers, gloves, hat."},
+    },
+    "humidity": {
+        "high": {"threshold": TOLERANCES["humidity"] + 25, "warning": "High humidity detected.", "ppe": "Breathable clothing, moisture-wicking fabrics."},
+        "low": {"threshold": TOLERANCES["humidity"] - 25, "warning": "Low humidity detected.", "ppe": "Moisturizer, lip balm, increased hydration."},
+    },
+    "uv_index": {"high": {"threshold": TOLERANCES["uv_index"] + 3, "warning": "High UV index detected.", "ppe": "Sunscreen, sunglasses, long sleeves, hat."}},
+    "allergen_density": {"high": {"threshold": TOLERANCES["allergen_density"] + 3, "warning": "High allergen density detected.", "ppe": "Mask, allergy medication, eye protection."}},
+    "air_quality": {"high": {"threshold": TOLERANCES["air_quality"] + 70, "warning": "Poor air quality detected.", "ppe": "N95 mask, avoid strenuous activity."}},
+    "radiation_level": {
+        "elevated": {"threshold": TOLERANCES["radiation_level"] * 10, "warning": "Elevated radiation detected.", "ppe": "Lead shielding, limit exposure."},
+        "significant": {"threshold": 0.1, "warning": "Significant radiation detected.", "ppe": "Full body radiation suit, potassium iodide."},
+        "lethal": {"threshold": 1, "warning": "Lethal radiation detected.", "ppe": "Immediate evacuation, maximum shielding."},
+    },
+    "smog_level": {"high": {"threshold": 50, "warning": "High smog level detected.", "ppe": "Mask, limit outdoor exposure."}},
+    "weather_overall": {"severe": {"threshold": "severe", "warning": "Severe weather conditions.", "ppe": "Seek shelter, appropriate weather gear."}},
+}
