@@ -16,7 +16,7 @@ complex rules and handle violations appropriately.
 Classes:
     RuleViolationError: Exception raised when a rule violation is detected.
     DataContext: Represents the context data for rule evaluation.
-    sub3_complex_rule: Handles complex rule processing and evaluation.
+    Sub3ComplexRule: Handles complex rule processing and evaluation.
 
 Functions:
     process_rule(context_data, request_id, alertmanager_url=None): Processes and
@@ -56,7 +56,7 @@ class DataContext:
         """
         self.context_data = context_data
 
-class sub3_complex_rule:
+class Sub3ComplexRule:
     """
     Handles complex rule processing and evaluation.
 
@@ -83,17 +83,20 @@ class sub3_complex_rule:
         self.shutdown_function = shutdown_function
         self.database_handler = database_handler
 
-    def process_rule(self, context_data, request_id, alertmanager_url=None):
+    async def process_rule(self, context_data, request_id, alertmanager_url=None):
         """
         Processes and evaluates complex rules based on the provided context data.
 
         This function creates a DataContext object, evaluates the rules using the
-        rule check function, and handles rule violations or errors.
+        rule check function, and handles rule violations or errors. It also
+        demonstrates how to retrieve law summaries from the database (this is
+        an example and would be adapted to your specific rule logic).
 
         Args:
             context_data (dict): Data used for rule evaluation.
             request_id (str): Identifier for the request.
-            alertmanager_url (str, optional): URL for Alertmanager notifications. Defaults to None.
+            alertmanager_url (str, optional): URL for Alertmanager notifications.
+                Defaults to None.
 
         Returns:
             dict: Results of rule processing.
@@ -105,7 +108,20 @@ class sub3_complex_rule:
             context = DataContext(context_data)
             if self.rule_check_function(context, request_id):
                 logging.info(f"Rules passed for request: {request_id}")
-                return {"rule_passed": True}
+
+                # Example: Retrieving a law summary (adapt to your logic)
+                law_id = context_data.get("law_id")  # Assuming law_id is in context
+                if law_id:
+                    law_summary = await self.database_handler.get_law_summary(law_id)
+                    if law_summary:
+                        logging.info(f"Retrieved law summary for law ID: {law_id}")
+                        return {"rule_passed": True, "law_summary": law_summary}
+                    else:
+                        logging.warning(f"Law summary not found for law ID: {law_id}")
+                        return {"rule_passed": True}  # Or handle this case differently
+                else:
+                    return {"rule_passed": True}
+
             else:
                 logging.warning(f"Rule violation detected for request: {request_id}")
                 raise RuleViolationError("Rule violation detected.")
