@@ -7,7 +7,13 @@ def monitor_seismic_activity(ground_movement, location):
     timestamp = datetime.datetime.now()
     logging.info(f"Seismic activity at {location} - {timestamp}: Ground Movement={ground_movement}")
 
+    analysis = {"alert": False, "message": "Seismic activity normal", "details": {}}
+
     # Basic analysis
     if ground_movement > 5:  # Example threshold
         logging.warning(f"Significant ground movement detected at {location}")
-        # Add alerting logic
+        analysis["alert"] = True
+        analysis["message"] = "Significant ground movement detected."
+        analysis["details"]["ground_movement"] = f"Ground Movement: {ground_movement}"
+
+    return analysis
