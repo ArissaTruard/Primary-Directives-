@@ -1,5 +1,7 @@
 # Primary Directives Application
 
+- this file may be somewhat outdated-
+  
 This application implements a Flask-based API designed to process requests, enforce rules, and manage data corrections. It incorporates features like database interaction, model loading, system metrics, and error handling.
 
 ## Key Features
@@ -15,38 +17,6 @@ This application implements a Flask-based API designed to process requests, enfo
 -   Input sanitization to prevent security vulnerabilities.
 -   Robust error handling and system shutdown capabilities.
 
-## Sub-Modules
-
-1.  **`sub3_complex_rule.py`:**
-    * **Purpose:** Processes and evaluates complex rules based on context data.
-    * **Key features:**
-        * Handles RuleViolation errors.
-        * Interacts with the database to retrieve law summaries.
-        * Implements complex rule checks.
-2.  **`sub_system.py`:**
-    * **Purpose:** Handles system shutdown by logging critical messages and optionally sending alerts to Alertmanager.
-3.  **`sub_system_metrics.py`:**
-    * **Purpose:** Collects and exposes system metrics (CPU, memory, disk, network) using Prometheus.
-4.  **`sub_database.py`:**
-    * **Purpose:** Manages database operations, including storing corrections, law summaries, and performing health checks.
-5.  **`sub_location.py`:**
-    * **Purpose:** Retrieves location information (currently a placeholder implementation).
-6.  **`sub_hashing.py`:**
-    * **Purpose:** Provides a function for generating SHA-256 hashes.
-7.  **`sub_rate_limit.py`:**
-    * **Purpose:** Implements a rate limiting decorator for functions.
-8.  **`sub_periodic_task.py`:**
-    * **Purpose:** Provides a decorator for running functions periodically.
-9.  **Module containing retry and circuit breaker functions and classes:**
-    * **Purpose:** Implements retry logic and circuit breaker pattern for handling failures.
-10. **`sub_task_que.py`:**
-    * **Purpose:** Manages and executes asynchronous tasks using a queue.
-11. **`sub_thread_pool.py`:**
-    * **Purpose:** Manages and executes tasks using a pool of threads.
-
-## Overall System Summary
-
-The `Primary Directives` application is designed to be a robust and reliable system that can process requests, enforce complex rules, and manage data corrections. It leverages various sub-modules to handle specific functionalities, ensuring modularity and maintainability. The application also incorporates best practices for error handling, logging, and metrics collection, making it suitable for production environments.
 
 ## Getting Started
 
