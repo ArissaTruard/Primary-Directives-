@@ -1,0 +1,8 @@
+TOLERANCES = {
+    "temperature": 20,  # Degrees Celsius (comfortable spring)
+    "humidity": 50,     # Percentage (comfortable spring)
+    "uv_index": 4,      # Moderate UV index
+    "allergen_density": 2, # Low allergen levels
+    "air_quality": 30,  # Good air quality (AQI)
+    "radiation_level": 0.0001,  # Sieverts (background)
+}
