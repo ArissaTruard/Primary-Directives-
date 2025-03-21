@@ -8,7 +8,7 @@ database interaction, model loading, system metrics, and error handling.
 Key Features:
 - API endpoints for health checks, request processing, metrics, and data correction.
 - Rule enforcement using a complex rule checking module.
-- Database operations for storing and retrieving data corrections.
+- Database operations for storing and retrieving data corrections and law summaries.
 - Model loading and integrity verification.
 - System metrics collection and exposure via Prometheus.
 - Configuration management using pydantic-settings and .env files.
@@ -66,16 +66,13 @@ api_response_size_histogram = Histogram(
 )
 
 # Import sub-codes
-from sub3_complex_rule import sub3_complex_rule, DataContext, RuleViolationError
+from sub3_complex_rule import Sub3ComplexRule, DataContext, RuleViolationError
 from sub_system import shutdown
 from sub_system_metrics import SystemMetrics
 from sub_database import DatabaseHandler
-from sub_location import LocationHandler # added LocationHandler
+from sub_location import LocationHandler
 
 class Settings(BaseSettings):
-    """
-    Application settings loaded from environment variables and .env file.
-    """
     authorization_api_url: str = "http://localhost:8080/auth"
     authorization_api_token: str = "your_token"
     model_name: str = "t5-small"
@@ -90,13 +87,8 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
 
 class PrimaryDirectives:
-    """
-    Main application class that initializes and manages the Flask API.
-    """
     def __init__(self):
-        """
-        Initializes the PrimaryDirectives application.
-        """
+        """Initializes the PrimaryDirectives application."""
         load_dotenv()
         self.config = Settings()
         self.app = Flask(__name__)
@@ -107,25 +99,19 @@ class PrimaryDirectives:
         self.system_metrics = SystemMetrics(cpu_usage_gauge, memory_usage_gauge, disk_usage_gauge, network_bytes_sent_gauge, network_bytes_received_gauge)
         self.system_metrics.start_metrics_updater()
         self.database_handler = DatabaseHandler(self.config.law_summary_db_path)
-        self.location_handler = LocationHandler() # added location handler
-        self.rule_checker = sub3_complex_rule(self._check_complex_rule, shutdown, self.database_handler)
+        self.location_handler = LocationHandler()
+        self.rule_checker = Sub3ComplexRule(self._check_complex_rule, shutdown, self.database_handler)
 
     def _setup_logging(self):
-        """
-        Configures logging for the application.
-        """
+        """Configures logging for the application."""
         logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s", filename=self.config.log_file)
 
     async def _build_law_summary_database(self):
-        """
-        Asynchronously builds the law summary database.
-        """
+        """Asynchronously builds the law summary database."""
         await self.database_handler.build_database()
 
     def _load_models(self):
-        """
-        Loads machine learning models and verifies integrity.
-        """
+        """Loads machine learning models and verifies integrity."""
         try:
             logging.info(f"Loading model: {self.config.model_name}")
             self._verify_model_integrity()
@@ -135,9 +121,7 @@ class PrimaryDirectives:
             raise
 
     def _verify_model_integrity(self):
-        """
-        Verifies the integrity of the loaded model using checksums.
-        """
+        """Verifies the integrity of the loaded model using checksums."""
         try:
             model_path = os.path.join(self.config.model_cache_dir, self.config.model_name)
             with open(model_path, "rb") as f:
@@ -156,14 +140,10 @@ class PrimaryDirectives:
             raise
 
     def _setup_flask_routes(self):
-        """
-        Sets up Flask routes for the application.
-        """
+        """Sets up Flask routes for the application."""
         @self.app.route("/v1/health", methods=["GET"])
         def health_check():
-            """
-            Performs database health check.
-            """
+            """Performs database health check."""
             try:
                 asyncio.run(self.database_handler.check_database_health(database_health_check_duration, database_error_counter))
                 return jsonify({"status": "ok"}), 200
@@ -173,14 +153,11 @@ class PrimaryDirectives:
 
         @self.app.route("/v1/process", methods=["POST"])
         def process():
-            """
-            Processes incoming requests, applies rules, and returns results.
-            """
+            """Processes incoming requests, applies rules, and returns results."""
             request_id = str(uuid.uuid4())
             logging.info(f"Request ID: {request_id}, Method: POST, Path: /v1/process")
             try:
                 data = request.get_json()
-                # Sanitize input data.
                 sanitized_data = self._sanitize_input(data)
                 api_request_size_histogram.observe(len(request.data))
                 loop = asyncio.new_event_loop()
@@ -195,23 +172,17 @@ class PrimaryDirectives:
 
         @self.app.route("/metrics")
         def metrics():
-            """
-            Exposes Prometheus metrics.
-            """
+            """Exposes Prometheus metrics."""
             return Response(generate_latest(), mimetype=CONTENT_TYPE_LATEST)
 
-        @self.app.route("/v
-/v1/correct", methods=["POST"])
+        @self.app.route("/v1/correct", methods=["POST"])
         def correct():
-            """
-            Stores user-provided corrections for situations.
-            """
+            """Stores user-provided corrections for situations."""
             auth_token = request.headers.get("Authorization")
             if auth_token != self.config.authorization_api_token:
                 return jsonify({"error": "Unauthorized"}), 401
             try:
                 data = request.get_json()
-                #Sanitize input data.
                 sanitized_data = self._sanitize_input(data)
                 situation_id = hashlib.sha256(json.dumps(sanitized_data["situation"]).encode()).hexdigest()
                 correction = json.dumps(sanitized_data["correction"])
@@ -260,11 +231,10 @@ class PrimaryDirectives:
             else:
                 context_dict = request_data
                 try:
-                    # Get location data
                     location_data = await self.location_handler.get_location()
                     context_dict.update(location_data)
 
-                    results = self.rule_checker.process_rule(context_dict, request_id, alertmanager_url = self.config.alertmanager_url)
+                    results = await self.rule_checker.process_rule(context_dict, request_id, alertmanager_url = self.config.alertmanager_url)
                     return results
                 except RuleViolationError:
                     rule_violation_counter.inc()
