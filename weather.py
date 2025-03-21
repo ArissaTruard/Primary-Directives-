@@ -3,9 +3,12 @@ import logging
 import datetime
 import requests
 import json
-from .sub_location import get_location_data  # Assuming sub_location.py exists
+from .sub_location import get_location_data
 
-def monitor_weather(humidity, temperature, uv, air_quality, allergens, sensor_location, weather_api_key=None, precipitation=None, precipitation_type=None, water_level=None, storm_alert=None):
+def monitor_weather(humidity, temperature, uv, air_quality, allergens, sensor_location,
+                    weather_api_key=None, precipitation=None, precipitation_type=None,
+                    water_level=None, storm_alert=None, wind_speed=None, wind_direction=None,
+                    solar_radiation=None):
     """
     Monitors and analyzes weather-related data, integrating external weather API if available,
     and adjusts thresholds based on sensor location.
@@ -22,12 +25,15 @@ def monitor_weather(humidity, temperature, uv, air_quality, allergens, sensor_lo
         precipitation_type (str, optional): Type of precipitation (e.g., rain, snow, hail).
         water_level (str, optional): Water level (e.g., normal, high, flood).
         storm_alert (str, optional): Storm alert message.
+        wind_speed (float, optional): Wind speed in km/h.
+        wind_direction (str, optional): Wind direction (e.g., N, S, E, W).
+        solar_radiation (float, optional): Solar radiation in W/m².
 
     Returns:
         dict: A dictionary containing the analysis results.
     """
     timestamp = datetime.datetime.now()
-    logging.info(f"Weather data at {sensor_location}: Humidity={humidity}, Temperature={temperature}, UV={uv}, Air Quality={air_quality}, Allergens={allergens}, Precipitation={precipitation}, Precipitation Type={precipitation_type}, Water Level={water_level}, Storm Alert={storm_alert}")
+    logging.info(f"Weather data at {sensor_location}: Humidity={humidity}, Temperature={temperature}, UV={uv}, Air Quality={air_quality}, Allergens={allergens}, Precipitation={precipitation}, Precipitation Type={precipitation_type}, Water Level={water_level}, Storm Alert={storm_alert}, Wind Speed={wind_speed}, Wind Direction={wind_direction}, Solar Radiation={solar_radiation}")
     analysis = {
         "alert": False,
         "message": "Weather conditions normal",
@@ -83,13 +89,22 @@ def monitor_weather(humidity, temperature, uv, air_quality, allergens, sensor_lo
                 analysis["message"] = "High allergen levels detected."
                 analysis["details"]["allergens"] = allergens["message"]
 
+            if wind_speed is not None and wind_speed > 50:  # Example threshold
+                analysis["alert"] = True
+                analysis["message"] = "High wind speed detected."
+                analysis["details"]["wind_speed"] = f"Wind Speed: {wind_speed} km/h, Direction: {wind_direction}"
+
+            if solar_radiation is not None and solar_radiation > 1000:  # Example threshold
+                analysis["alert"] = True
+                analysis["message"] = "High solar radiation detected."
+                analysis["details"]["solar_radiation"] = f"Solar Radiation: {solar_radiation} W/m²"
+
             # Integrate external weather API if available
             if weather_api_key:
                 try:
                     external_weather = get_external_weather(sensor_location, weather_api_key)
                     analysis["details"]["external_weather"] = external_weather
                     # Add logic to compare internal and external data.
-                    # And modify the alert and message if there is a discrepancy.
                 except Exception as e:
                     logging.error(f"Error fetching external weather data: {e}")
                     analysis["details"]["external_weather_error"] = str(e)
