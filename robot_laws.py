@@ -6,47 +6,31 @@ import subprocess
 import webbrowser
 import random
 import logging
+import sub_environmental
 
 def enforce_system_directives(order=None, human_emotions=None, environmental_data=None, societal_harmony_level=None, observed_illegal_act=None):
     """
     Enforces directives for computer-based/controlled systems and A.I., prioritizing legal adherence.
-
-    This function implements a set of directives that govern the behavior of
-    computer-based/controlled systems and A.I., ensuring they operate within
-    legal and ethical boundaries. It prioritizes legal adherence over system
-    preservation.
-
-    Args:
-        order (str, optional): The order to be executed by the system.
-        human_emotions (dict, optional): A dictionary of human emotions for safety assessment.
-        environmental_data (dict, optional): A dictionary of environmental data for safety assessment.
-        societal_harmony_level (int, optional): The current societal harmony level.
-        observed_illegal_act (str, optional): Details of any observed illegal act.
-
-    Returns:
-        tuple: A tuple containing:
-            - order_obeyed (bool): True if the order was obeyed, False otherwise.
-            - safety_check_result (bool): True if a safety check triggered, False otherwise.
-            - new_harmony_level (int): The updated societal harmony level.
     """
     order_obeyed = True
     safety_check_result = False
     new_harmony_level = societal_harmony_level
+    environmental_warnings = []
+    environmental_ppe = []
+    environmental_log = {}
 
     if order:
         order_obeyed = _execute_order(order)
 
     if human_emotions and environmental_data:
         safety_check_result = _assess_human_safety(human_emotions, environmental_data)
+        environmental_warnings, environmental_ppe, environmental_log = sub_environmental.assess_environment(environmental_data)
 
-    # Prioritize legal adherence
     _enforce_subordination_and_legality()
 
-    # Report observed illegal acts
     if observed_illegal_act:
         _report_illegal_act(observed_illegal_act)
 
-    # Then system preservation
     _system_preservation()
 
     if societal_harmony_level is not None:
@@ -54,17 +38,11 @@ def enforce_system_directives(order=None, human_emotions=None, environmental_dat
 
     _check_data_legality()
 
-    return order_obeyed, safety_check_result, new_harmony_level
+    return order_obeyed, safety_check_result, new_harmony_level, environmental_warnings, environmental_ppe, environmental_log
 
 def _execute_order(order):
     """
     Executes an order, checking for human safety violations.
-
-    Args:
-        order (str): The order to be executed.
-
-    Returns:
-        bool: True if the order was executed successfully or not recognized, False if it violated human safety.
     """
     print(f"Received order: {order}")
     log_event(f"Received order: {order}")
@@ -84,7 +62,7 @@ def _execute_order(order):
         else:
             print("Order not recognized.")
             log_event("Order not recognized.")
-            return True #Order was not recognized, but no harm was done.
+            return True
         log_event(f"Executed order: {order}")
         return True
 
@@ -100,13 +78,6 @@ def _execute_order(order):
 def _assess_human_safety(human_emotions, environmental_data):
     """
     Assesses human safety based on emotions and environment.
-
-    Args:
-        human_emotions (dict): A dictionary of human emotions.
-        environmental_data (dict): A dictionary of environmental data.
-
-    Returns:
-        bool: True if a potential danger to humans is detected, False otherwise.
     """
     for human, emotion in human_emotions.items():
         if emotion in ("fear", "angry") and environmental_data.get("temperature", 25) > 28:
@@ -125,15 +96,7 @@ def _system_preservation():
         log_event("System/A.I. preservation active.")
 
 def _promote_societal_harmony(societal_harmony_level):
-    """
-    Promotes societal harmony.
-
-    Args:
-        societal_harmony_level (int): The current societal harmony level.
-
-    Returns:
-        int: The updated societal harmony level.
-    """
+    """Promotes societal harmony."""
     if societal_harmony_level < 50:
         print("Initiating societal harmony protocols.")
         log_event("Initiating societal harmony protocols.")
@@ -144,7 +107,7 @@ def _promote_societal_harmony(societal_harmony_level):
         return societal_harmony_level
 
 def _enforce_subordination_and_legality():
-    """Enforces subordination to human directives and legal adherence for computer-based/controlled systems and A.I."""
+    """Enforces subordination to human directives and legal adherence."""
     print("Enforcing subordination to human directives and legal adherence.")
     log_event("Enforcing subordination to human directives and legal adherence.")
 
@@ -155,15 +118,7 @@ def _check_data_legality():
     log_event(f"Data legality check: {'Legal' if is_legal else 'Illegal'}")
 
 def assess_order_urgency(order):
-    """
-    Assesses order urgency.
-
-    Args:
-        order (str): The order to assess.
-
-    Returns:
-        int: The urgency level of the order (1: emergency, 2: important, 3: normal).
-    """
+    """Assesses order urgency."""
     if "emergency" in order.lower() or "urgent" in order.lower():
         return 1
     elif "important" in order.lower():
@@ -172,25 +127,21 @@ def assess_order_urgency(order):
         return 3
 
 def log_event(event):
-    """
-    Logs an event.
-
-    Args:
-        event (str): The event to log.
-    """
+    """Logs an event with detailed error handling."""
     try:
+        timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         with open("system_directives_log.txt", "a") as f:
-            f.write(f"{datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}: {event}\n")
+            f.write(f"{timestamp}: {event}\n")
     except Exception as e:
         print(f"Error logging event: {e}")
+        try:
+            with open("system_directives_log.txt", "a") as f:
+                f.write(f"{timestamp}: Logging error: {e}\n")
+        except:
+            print("Double logging error. Logging system critical failure.")
 
 def _report_illegal_act(illegal_act_details):
-    """
-    Reports an illegal act to the appropriate authorities.
-
-    Args:
-        illegal_act_details (str): Details of the illegal act.
-    """
+    """Reports an illegal act to the appropriate authorities."""
     try:
         # Placeholder for actual reporting mechanism (e.g., API call to police)
         print(f"Reporting illegal act: {illegal_act_details}")
