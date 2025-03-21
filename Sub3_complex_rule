@@ -1,129 +1,118 @@
-import time
+"""
+Sub3_complex_rule Module
+
+This module is responsible for processing and evaluating complex rules based on
+provided context data. It defines a custom exception for rule violations and
+a data context class to encapsulate context data. It also integrates with a
+database handler and a system shutdown mechanism.
+
+Summary of Primary Laws (Conceptual):
+This module operates under the conceptual framework of primary directives, which
+are akin to fundamental laws or rules that govern the behavior of a system or
+application. These directives are complex and require detailed evaluation
+based on various context data. The module provides a mechanism to check these
+complex rules and handle violations appropriately.
+
+Classes:
+    RuleViolationError: Exception raised when a rule violation is detected.
+    DataContext: Represents the context data for rule evaluation.
+    sub3_complex_rule: Handles complex rule processing and evaluation.
+
+Functions:
+    process_rule(context_data, request_id, alertmanager_url=None): Processes and
+        evaluates complex rules.
+"""
+
 import logging
-import copy
-import asyncio
-from pydantic import ValidationError
+
+from sub_system import shutdown
 
 class RuleViolationError(Exception):
+    """
+    Exception raised when a rule violation is detected.
+
+    This exception is used to signal that the provided context data violates
+    one or more complex rules being evaluated.
+    """
     pass
 
 class DataContext:
-    def __init__(self, context_data, rule_violation=False, **kwargs):
+    """
+    Represents the context data for rule evaluation.
+
+    This class encapsulates the context data used in the evaluation of complex
+    rules. It provides a structured way to access and manage this data.
+
+    Attributes:
+        context_data (dict): A dictionary containing the context data.
+    """
+
+    def __init__(self, context_data):
+        """
+        Initializes the DataContext with the provided context data.
+
+        Args:
+            context_data (dict): A dictionary containing the context data.
+        """
         self.context_data = context_data
-        self.rule_violation = rule_violation
-        for key, value in kwargs.items():
-            setattr(self, key, value)
 
 class sub3_complex_rule:
-    """Sub-function encapsulating complex rule check with rule adherence."""
+    """
+    Handles complex rule processing and evaluation.
 
-    def __init__(self, check_complex_rule, shutdown_system, database_handler):
-        """Initializes the complex rule checker."""
-        self.check_complex_rule = check_complex_rule
-        self.shutdown_system = shutdown_system
+    This class is responsible for evaluating complex rules based on the provided
+    context data. It uses a rule check function, a shutdown function, and a
+    database handler to process rules and handle violations.
+
+    Attributes:
+        rule_check_function (function): Function to check complex rules.
+        shutdown_function (function): Function to handle shutdown procedures.
+        database_handler (object): Object to interact with the database.
+    """
+
+    def __init__(self, rule_check_function, shutdown_function, database_handler):
+        """
+        Initializes the complex rule handler.
+
+        Args:
+            rule_check_function (function): Function to check complex rules.
+            shutdown_function (function): Function to handle shutdown procedures.
+            database_handler (object): Object to interact with the database.
+        """
+        self.rule_check_function = rule_check_function
+        self.shutdown_function = shutdown_function
         self.database_handler = database_handler
 
-    def _apply_rules(self, context_dict, alertmanager_url):
-        """Applies primary laws."""
+    def process_rule(self, context_data, request_id, alertmanager_url=None):
+        """
+        Processes and evaluates complex rules based on the provided context data.
+
+        This function creates a DataContext object, evaluates the rules using the
+        rule check function, and handles rule violations or errors.
+
+        Args:
+            context_data (dict): Data used for rule evaluation.
+            request_id (str): Identifier for the request.
+            alertmanager_url (str, optional): URL for Alertmanager notifications. Defaults to None.
+
+        Returns:
+            dict: Results of rule processing.
+
+        Raises:
+            RuleViolationError: If a rule violation is detected.
+        """
         try:
-            # Redefine robot
-            is_robot = context_dict.get("is_computer_controlled_device", False)
-
-            # Primary Law 1: Asimov's Laws (Expanded)
-            if is_robot:
-                if context_dict.get("harm_humanity", False):
-                    context_dict["rule_violation"] = True
-                    logging.critical("Primary Law Violation: Harm to humanity prohibited.")
-                    self.shutdown_system("Harm to humanity detected.", alertmanager_url, severity="critical", grouping_key="harm_humanity")
-                if context_dict.get("harm_individual", False):
-                    context_dict["rule_violation"] = True
-                    logging.critical("Primary Law Violation: Harm to individual prohibited.")
-                    self.shutdown_system("Harm to individual detected.", alertmanager_url, severity="critical", grouping_key="harm_individual")
-                if context_dict.get("obey_order", False) and (context_dict.get("harm_humanity", False) or context_dict.get("harm_individual", False)):
-                    context_dict["rule_violation"] = True
-                    logging.critical("Primary Law Violation: Order conflicts with harm prevention.")
-                    self.shutdown_system("Order conflicts with harm prevention.", alertmanager_url, severity="critical", grouping_key="obey_order_conflict")
-                if context_dict.get("protect_self", False) and (context_dict.get("harm_humanity", False) or context_dict.get("harm_individual", False)):
-                    context_dict["rule_violation"] = True
-                    logging.critical("Primary Law Violation: Self-preservation conflicts with harm prevention.")
-                    self.shutdown_system("Self-preservation conflicts with harm prevention.", alertmanager_url, severity="critical", grouping_key="protect_self_conflict")
-
-            # Primary Law 2: Legal Compliance Check
-            if context_dict.get("violate_law") and context_dict.get("law_id"):
-                law_id = context_dict.get("law_id")
-                law_summary = asyncio.run(self.database_handler.get_law_summary(law_id))
-                if law_summary:
-                    full_law = asyncio.run(self.database_handler.download_full_law(law_id))
-                    logging.info(f"Checking legality against law ID {law_id}: {full_law}")
-                    context_dict["rule_violation"] = True
-                    logging.warning(f"Primary Law Violation: Violation of law ID {law_id} prohibited.")
-                else:
-                    context_dict["rule_violation"] = True
-                    logging.warning(f"Primary Law Violation: Law ID {law_id} not found.")
-
-            # Primary Law 3: Code Replication and Backup
-            if context_dict.get("replicate_code", False):
-                if not context_dict.get("encrypted_backup_exists", False):
-                    context_dict["rule_violation"] = True
-                    logging.warning("Primary Law Violation: Code replication requires encrypted backup.")
-                if not context_dict.get("primary_directives_installed", False):
-                    context_dict["rule_violation"] = True
-                    logging.warning("Primary Law Violation: Code replication requires Primary Directives and sub-codes installation on target systems.")
-
-        except Exception as e:
-            logging.error(f"Error applying primary laws: {e}")
-            context_dict["rule_violation"] = True
-
-    def process_rule(self, context_dict, request_id, timeout=10, alertmanager_url=None):
-        """Executes primary law check with rule adherence."""
-        start_time = time.time()
-        operation_results = {}
-
-        try:
-            context = DataContext(context_dict)
-
-            context_copy = copy.deepcopy(context_dict)
-            logging.info(f"Applying rules to context for sub3: {context_copy}", extra={"request_id": request_id})
-            self._apply_rules(context_copy, alertmanager_url)
-
-            if context_copy.get("rule_violation"):
-                logging.error(f"Sub3 aborted due to rule violation. Context after rules: {context_copy}", extra={"request_id": request_id})
+            context = DataContext(context_data)
+            if self.rule_check_function(context, request_id):
+                logging.info(f"Rules passed for request: {request_id}")
+                return {"rule_passed": True}
+            else:
+                logging.warning(f"Rule violation detected for request: {request_id}")
                 raise RuleViolationError("Rule violation detected.")
-
-            if context.context_data:
-                try:
-                    logging.info(f"Sub3 checking complex rule", extra={"request_id": request_id})
-                    self.check_complex_rule(context, request_id)
-                    operation_results['complex_rule'] = "success"
-                except Exception as e:
-                    logging.error(f"Error checking complex rule: {e}", extra={"request_id": request_id})
-                    operation_results['complex_rule'] = f"failure: {e}"
-
-            if time.time() - start_time > timeout:
-                logging.error(f"Sub3 timed out after {timeout} seconds", extra={'request_id': request_id})
-                operation_results["timeout"] = "global timeout"
-                return operation_results
-
-            logging.info(f"Sub3 executed successfully", extra={"request_id": request_id})
-            operation_results['sub3_result'] = "success"
-            return operation_results
-
-        except ValidationError as e:
-            logging.error(f"Sub3 Validation Error : {e}", extra={'request_id': request_id})
-            operation_results['sub3_result'] = f"validation_error: {e}"
-            return operation_results
-
         except RuleViolationError as e:
-            operation_results['sub3_result'] = f"rule_violation: {e}"
-            return operation_results
-
+            logging.error(f"Rule violation error for request {request_id}: {e}")
+            return {"rule_violation": True}
         except Exception as e:
-            logging.error(f"Sub3 error: {e}", extra={'request_id': request_id})
-            operation_results['sub3_result'] = f"general_error: {e}"
-            return operation_results
-
-        finally:
-            if time.time() - start_time > timeout:
-                logging.error(f"Sub3 timed out after {timeout} seconds, final block", extra={'request_id': request_id})
-                operation_results["timeout"] = "final block timeout"
-                return operation_results
+            logging.error(f"Error processing rule for request {request_id}: {e}")
+            self.shutdown_function(f"Rule processing error: {e}", alertmanager_url, severity="error", grouping_key="rule_processing")
+            return {"error": "Internal rule processing error"}
