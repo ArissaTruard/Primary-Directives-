@@ -1,3 +1,23 @@
+"""
+Primary Directives Application
+
+This application implements a Flask-based API designed to process requests,
+enforce rules, and manage data corrections. It incorporates features like
+database interaction, model loading, system metrics, and error handling.
+
+Key Features:
+- API endpoints for health checks, request processing, metrics, and data correction.
+- Rule enforcement using a complex rule checking module.
+- Database operations for storing and retrieving data corrections.
+- Model loading and integrity verification.
+- System metrics collection and exposure via Prometheus.
+- Configuration management using pydantic-settings and .env files.
+- Logging to a file.
+- Location services for context enrichment.
+- Input sanitization to prevent security vulnerabilities.
+- Robust error handling and system shutdown capabilities.
+"""
+
 import asyncio
 import hashlib
 import json
@@ -17,6 +37,7 @@ from prometheus_client import (
     Counter,
 )
 from pydantic_settings import BaseSettings, SettingsConfigDict
+import html  # For input sanitization
 
 # Prometheus metrics
 database_health_check_duration = Histogram(
@@ -52,6 +73,9 @@ from sub_database import DatabaseHandler
 from sub_location import LocationHandler # added LocationHandler
 
 class Settings(BaseSettings):
+    """
+    Application settings loaded from environment variables and .env file.
+    """
     authorization_api_url: str = "http://localhost:8080/auth"
     authorization_api_token: str = "your_token"
     model_name: str = "t5-small"
@@ -66,7 +90,13 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
 
 class PrimaryDirectives:
+    """
+    Main application class that initializes and manages the Flask API.
+    """
     def __init__(self):
+        """
+        Initializes the PrimaryDirectives application.
+        """
         load_dotenv()
         self.config = Settings()
         self.app = Flask(__name__)
@@ -81,12 +111,21 @@ class PrimaryDirectives:
         self.rule_checker = sub3_complex_rule(self._check_complex_rule, shutdown, self.database_handler)
 
     def _setup_logging(self):
+        """
+        Configures logging for the application.
+        """
         logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s", filename=self.config.log_file)
 
     async def _build_law_summary_database(self):
+        """
+        Asynchronously builds the law summary database.
+        """
         await self.database_handler.build_database()
 
     def _load_models(self):
+        """
+        Loads machine learning models and verifies integrity.
+        """
         try:
             logging.info(f"Loading model: {self.config.model_name}")
             self._verify_model_integrity()
@@ -96,6 +135,9 @@ class PrimaryDirectives:
             raise
 
     def _verify_model_integrity(self):
+        """
+        Verifies the integrity of the loaded model using checksums.
+        """
         try:
             model_path = os.path.join(self.config.model_cache_dir, self.config.model_name)
             with open(model_path, "rb") as f:
@@ -114,8 +156,14 @@ class PrimaryDirectives:
             raise
 
     def _setup_flask_routes(self):
+        """
+        Sets up Flask routes for the application.
+        """
         @self.app.route("/v1/health", methods=["GET"])
         def health_check():
+            """
+            Performs database health check.
+            """
             try:
                 asyncio.run(self.database_handler.check_database_health(database_health_check_duration, database_error_counter))
                 return jsonify({"status": "ok"}), 200
@@ -125,14 +173,19 @@ class PrimaryDirectives:
 
         @self.app.route("/v1/process", methods=["POST"])
         def process():
+            """
+            Processes incoming requests, applies rules, and returns results.
+            """
             request_id = str(uuid.uuid4())
             logging.info(f"Request ID: {request_id}, Method: POST, Path: /v1/process")
             try:
                 data = request.get_json()
+                # Sanitize input data.
+                sanitized_data = self._sanitize_input(data)
                 api_request_size_histogram.observe(len(request.data))
                 loop = asyncio.new_event_loop()
                 asyncio.set_event_loop(loop)
-                results = loop.run_until_complete(self._process_request(data, request_id))
+                results = loop.run_until_complete(self._process_request(sanitized_data, request_id))
                 loop.close()
                 api_response_size_histogram.observe(len(json.dumps(results).encode("utf-8")))
                 return jsonify(results), 200
@@ -142,18 +195,27 @@ class PrimaryDirectives:
 
         @self.app.route("/metrics")
         def metrics():
+            """
+            Exposes Prometheus metrics.
+            """
             return Response(generate_latest(), mimetype=CONTENT_TYPE_LATEST)
 
-        @self.app.route("/v1/correct", methods=["POST"])
+        @self.app.route("/v
+/v1/correct", methods=["POST"])
         def correct():
+            """
+            Stores user-provided corrections for situations.
+            """
             auth_token = request.headers.get("Authorization")
             if auth_token != self.config.authorization_api_token:
                 return jsonify({"error": "Unauthorized"}), 401
             try:
                 data = request.get_json()
-                situation_id = hashlib.sha256(json.dumps(data["situation"]).encode()).hexdigest()
-                correction = json.dumps(data["correction"])
-                authorized_user = data["authorized_user"]
+                #Sanitize input data.
+                sanitized_data = self._sanitize_input(data)
+                situation_id = hashlib.sha256(json.dumps(sanitized_data["situation"]).encode()).hexdigest()
+                correction = json.dumps(sanitized_data["correction"])
+                authorized_user = sanitized_data["authorized_user"]
                 loop = asyncio.new_event_loop()
                 asyncio.set_event_loop(loop)
                 loop.run_until_complete(self.database_handler.store_correction(situation_id, correction, authorized_user))
@@ -164,16 +226,35 @@ class PrimaryDirectives:
                 return jsonify({"error": "Internal server error"}), 500
 
     def _check_complex_rule(self, context, request_id):
-        #This is a placeholder for the actual complex rule checking.
+        """
+        Placeholder for complex rule checking.
+
+        Args:
+            context (DataContext): The context data for rule checking.
+            request_id (str): The request ID.
+
+        Returns:
+            bool: True if the rule is satisfied, False otherwise.
+        """
         logging.info(f"Complex rule check called: {request_id}, context: {context.context_data}")
         return True
 
     async def _process_request(self, request_data, request_id):
+        """
+        Processes an incoming request, applies rules, and returns results.
+
+        Args:
+            request_data (dict): The request data.
+            request_id (str): The request ID.
+
+        Returns:
+            dict: The processing results.
+        """
         try:
             situation_id = hashlib.sha256(json.dumps(request_data).encode()).hexdigest()
             stored_correction = await self.database_handler.get_stored_correction(situation_id)
 
-            if stored
+            if stored_correction:
                 logging.info(f"Applying stored correction for situation: {situation_id}")
                 return json.loads(stored_correction)
             else:
@@ -195,7 +276,37 @@ class PrimaryDirectives:
             return {"error": "Internal server error"}
 
     def run(self, host="0.0.0.0", port=8000, debug=False):
+        """
+        Runs the Flask application.
+
+        Args:
+            host (str): The host to run the application on.
+            port (int): The port to run the application on.
+            debug (bool): Whether to run in debug mode.
+        """
         self.app.run(host=host, port=port, debug=debug)
+
+    def _sanitize_input(self, data):
+        """
+        Sanitizes input data to prevent injection attacks.
+
+        Args:
+            data (dict): The input data to sanitize.
+
+        Returns:
+            dict: The sanitized data.
+        """
+        if isinstance(data, dict):
+            sanitized_data = {}
+            for key, value in data.items():
+                sanitized_data[key] = self._sanitize_input(value)
+            return sanitized_data
+        elif isinstance(data, list):
+            return [self._sanitize_input(item) for item in data]
+        elif isinstance(data, str):
+            return html.escape(data)
+        else:
+            return data
 
 if __name__ == "__main__":
     app = PrimaryDirectives()
