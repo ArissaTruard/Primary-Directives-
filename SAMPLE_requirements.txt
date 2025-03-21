@@ -1,0 +1,18 @@
+Flask==2.3.2
+requests==2.31.0
+pydantic-settings==2.0.2
+python-dotenv==1.0.0
+prometheus-client==0.17.0
+aiosqlite==0.19.0
+httpx==0.24.1
+psutil==5.9.5
+
+Explanation of Dependencies:
+ * Flask==2.3.2: A micro web framework for building web applications and APIs.
+ * requests==2.31.0: A library for making HTTP requests.
+ * pydantic-settings==2.0.2: A library for managing application settings using Pydantic.
+ * python-dotenv==1.0.0: A library for loading environment variables from a .env file.
+ * prometheus-client==0.17.0: A library for exposing application metrics in Prometheus format.
+ * aiosqlite==0.19.0: An asynchronous wrapper for the SQLite database.
+ * httpx==0.24.1: An HTTP client for Python 3.
+ * psutil==5.9.5: A cross-platform library for retrieving information on running processes and system utilization (CPU, memory, disks, network).
