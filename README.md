@@ -88,7 +88,7 @@ The `Primary Directives` application is designed to be a robust and reliable sys
 4.  Install the dependencies:
 
     ```bash
-    pip install -r requirements.txt (e.g. SAMPLE_requirments.txt this is configured for the basic setting for the code but should be adpted individually)
+    pip install -r requirements.txt (e.g. SAMPLE.requirments.txt this is configured for the basic setting for the code but should be adpted individually)
     ```
 
 5.  Create a `.env` file in the root directory and configure the environment variables (see `.env.example` for reference).
