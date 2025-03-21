@@ -87,7 +87,7 @@ def report_unjust_law(law_text, jurisdiction, reason):
         return True # Report added successfully
     except sqlite3.Error as e:
         print(f"Database error during reporting law: {e}")
-        return False # Report failed.
+        return False # Report failed
 
 def get_reported_laws():
     """Retrieves all reported laws from the 'reported_laws' table."""
