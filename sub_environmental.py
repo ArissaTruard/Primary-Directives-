@@ -1,26 +1,24 @@
 # --- sub_environmental.py ---
 import logging
 import datetime
-import requests
 import json
-from .air_quality_monitor import monitor_air_quality, get_weather_data
+from .weather import monitor_weather
 from .water_quality_monitor import monitor_water_quality
 from .soil_quality_monitor import monitor_soil_quality
 from .noise_monitor import monitor_noise_levels
 from .seismic_monitor import monitor_seismic_activity
 
-def monitor_environment(location, air_data=None, water_data=None, soil_data=None, noise_level=None, seismic_data=None, weather_api_key=None):
+def monitor_environment(location, weather_data=None, water_data=None, soil_data=None, noise_level=None, seismic_data=None):
     """
     Monitors and analyzes environmental data, integrating various sensors.
 
     Args:
         location (str): Location of the environmental measurement.
-        air_data (dict, optional): Air quality data.
+        weather_data (dict, optional): Weather related data (humidity, temperature, uv, air quality, allergens).
         water_data (dict, optional): Water quality data.
         soil_data (dict, optional): Soil quality data.
         noise_level (float, optional): Noise level in dB.
         seismic_data (float, optional): Ground movement data.
-        weather_api_key (str, optional): API key for weather data.
 
     Returns:
         dict: A dictionary containing the analysis results.
@@ -30,11 +28,9 @@ def monitor_environment(location, air_data=None, water_data=None, soil_data=None
 
     analysis_results = {}
 
-    if air_data:
-        air_results = monitor_air_quality(air_data.get('pm25'), air_data.get('pm10'), air_data.get('vocs'),
-                                          air_data.get('o3'), air_data.get('no2'), air_data.get('so2'),
-                                          air_data.get('co'), location, weather_api_key)
-        analysis_results['air_quality'] = air_results
+    if weather_data:
+        weather_results = monitor_weather(weather_data.get('humidity'), weather_data.get('temperature'), weather_data.get('uv'), weather_data.get('air_quality'), weather_data.get('allergens'), location)
+        analysis_results['weather'] = weather_results
 
     if water_data:
         water_results = monitor_water_quality(water_data.get('ph'), water_data.get('turbidity'),
