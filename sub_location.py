@@ -1,42 +1,61 @@
-"""
-Sub_location Module
-
-This module provides functionality to retrieve location information. It currently
-uses a placeholder implementation that returns a predefined location. In a real-world
-scenario, this module would integrate with a location service or API.
-
-Classes:
-    LocationHandler: Handles location retrieval.
-"""
-
+import geocoder
 import logging
 
-class LocationHandler:
-    """
-    Handles location retrieval.
-
-    This class provides a method to get location information. Currently, it uses
-    a placeholder implementation that returns a predefined location. In a real-world
-    scenario, this class would integrate with a location service or API.
-    """
-
-    async def get_location(self):
-        """
-        Retrieves location information.
-
-        Returns:
-            dict: A dictionary containing location data.
-        """
-        try:
-            # Placeholder location data
-            location_data = {
-                "latitude": 34.0522,  # Example latitude
-                "longitude": -118.2437,  # Example longitude
-                "city": "Los Angeles",  # Example city
-                "country": "USA"  # Example country
+def get_current_location():
+    """Retrieves the robot's current location details."""
+    try:
+        g = geocoder.ip('me')  # Get location from IP address
+        if g.latlng:
+            latitude, longitude = g.latlng
+            city = g.city
+            state = g.state
+            country = g.country
+            return {
+                "latitude": latitude,
+                "longitude": longitude,
+                "city": city,
+                "state": state,
+                "country": country
             }
-            logging.info("Retrieved placeholder location data.")
-            return location_data
-        except Exception as e:
-            logging.error(f"Error retrieving location: {e}")
-            return {}  # Return empty dictionary on error
+        else:
+            logging.warning("Could not determine location from IP.")
+            return None  # Location could not be determined
+    except Exception as e:
+        logging.error(f"Error getting location: {e}")
+        return None  # Error occurred during location retrieval
+
+# Example usage of other location functions (if available)
+# def get_location_from_address(address):
+#     """Retrieves location from an address."""
+#     try:
+#         return geocode(address)
+#     except Exception as e:
+#         logging.error(f"Error geocoding address: {e}")
+#         return None
+
+# def get_address_from_location(lat, lng):
+#     """Retrieves address from latitude and longitude."""
+#     try:
+#         return reverse_geocode((lat, lng))
+#     except Exception as e:
+#         logging.error(f"Error reverse geocoding location: {e}")
+#         return None
+
+if __name__ == "__main__":
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
+
+    current_location = get_current_location()
+    if current_location:
+        print("Current location:", current_location)
+    else:
+        print("Could not determine current location.")
+
+    # Example usage of other location functions (if available)
+    # address_location = get_location_from_address("1600 Amphitheatre Parkway, Mountain View, CA")
+    # if address_location:
+    #     print("Location from address:", address_location)
+    #
+    # lat, lng = 37.4220, -122.0841
+    # location_address = get_address_from_location(lat, lng)
+    # if location_address:
+    #     print("Address from location:", location_address)
