@@ -1,0 +1,117 @@
+import requests
+import logging
+import os
+from dotenv import load_dotenv
+
+# Configure logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+
+load_dotenv()  # Load environment variables from .env file
+
+class RealWorldEconomicDataFetcher:
+    """
+    A class to fetch real-world economic data for a specified location using external APIs.
+
+    Attributes:
+        target_location (str): The geographical location for which economic data is fetched (e.g., "New York, NY").
+        api_access_keys (dict): Dictionary containing API access keys for external data services.
+    """
+
+    def __init__(self, target_location):
+        """
+        Initializes the RealWorldEconomicDataFetcher with a target location and API access keys.
+
+        Args:
+            target_location (str): The geographical location to monitor.
+        """
+        self.target_location = target_location
+        self.api_access_keys = {
+            "census_api_key": os.getenv("CENSUS_API_KEY"),
+            "zillow_api_key": os.getenv("ZILLOW_API_KEY"), #if applicable
+            "utilities_api_key": os.getenv("UTILITIES_API_KEY"), #if applicable
+            #Add any other keys here
+        }
+
+        if not all(self.api_access_keys.values()):
+            logging.error("API access keys are missing. Please configure them in the .env file.")
+            raise ValueError("API access keys missing.")
+
+        logging.info(f"RealWorldEconomicDataFetcher initialized for {self.target_location}")
+
+    def fetch_average_income(self):
+        """
+        Retrieves the average income for the target location using the US Census API.
+
+        Returns:
+            float: The average income, or None if an error occurs.
+        """
+        try:
+            # Example using Census API (replace with actual API endpoint and parameters)
+            #This is a placeholder. You will need to build the correct API call.
+            # Example API call structure (adjust accordingly):
+            api_url = f"https://api.census.gov/data/2022/acs/acs1?get=B19013_001E&for=place:{self.target_location}&key={self.api_access_keys['census_api_key']}"
+            response = requests.get(api_url)
+            response.raise_for_status()  # Raise HTTPError for bad responses (4xx or 5xx)
+            data = response.json()
+            #Extract the income from the JSON. This depends on the specific API response.
+            income = float(data[1][0]) #This is a placeholder. Adapt it to the JSON response.
+            logging.info(f"Average income for {self.target_location}: {income}")
+            return income
+
+        except requests.exceptions.RequestException as e:
+            logging.error(f"Error fetching income data: {e}")
+            return None
+        except (ValueError, KeyError, IndexError) as e:
+            logging.error(f"Error processing income data: {e}")
+            return None
+
+    def fetch_average_rent(self):
+        """
+        Retrieves the average rent for the target location (example using Zillow, if available).
+
+        Returns:
+            float: The average rent, or None if an error occurs.
+        """
+        #Implement your Zillow or other rent api call here.
+        #This is a placeholder.
+        logging.warning("Rent API functionality not implemented. Returns None.")
+        return None
+
+    def fetch_utilities_cost(self):
+        """
+        Retrieves the average utilities cost for the target location (example using a utilities API, if available).
+
+        Returns:
+            float: The average utilities cost, or None if an error occurs.
+        """
+        #Implement your utilities api call here.
+        #This is a placeholder.
+        logging.warning("Utilities API functionality not implemented. Returns None.")
+        return None
+
+    def retrieve_economic_data(self):
+        """
+        Retrieves and returns all available economic data for the target location.
+
+        Returns:
+            dict: A dictionary containing the economic data.
+        """
+        income = self.fetch_average_income()
+        rent = self.fetch_average_rent()
+        utilities = self.fetch_utilities_cost()
+
+        return {
+            "location": self.target_location,
+            "average_income": income,
+            "average_rent": rent,
+            "utilities_cost": utilities,
+        }
+
+# Example Usage
+if __name__ == "__main__":
+    try:
+        data_fetcher = RealWorldEconomicDataFetcher(target_location="New York, NY") #Replace with a real location.
+        economic_data = data_fetcher.retrieve_economic_data()
+        print(economic_data)
+    except ValueError as e:
+        print(f"Error: {e}")
