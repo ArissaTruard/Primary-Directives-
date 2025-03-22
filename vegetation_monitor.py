@@ -21,10 +21,10 @@ def monitor_vegetation(location_input=None, latitude=None, longitude=None, veget
     api_data_available = False
 
     try:
-        sensor_data = get_ndvi_from_sensor()
-        if sensor_data is not None:
+        sensor_data = get_vegetation_sensor_data()
+        if sensor_data:
             sensor_data_available = True
-            logging.info(f"Vegetation sensor data at {location_str}: NDVI={sensor_data}")
+            logging.info(f"Vegetation sensor data at {location_str}: {sensor_data}")
         else:
             logging.warning("Sensor data unavailable.")
     except Exception as e:
@@ -33,9 +33,9 @@ def monitor_vegetation(location_input=None, latitude=None, longitude=None, veget
     if not sensor_data_available:
         try:
             api_data = get_vegetation_api_data(location_str, vegetation_api_key)
-            if api_data is not None:
+            if api_data:
                 api_data_available = True
-                logging.info(f"Vegetation API data at {location_str}: NDVI={api_data}")
+                logging.info(f"Vegetation API data at {location_str}: {api_data}")
             else:
                 logging.warning("API data unavailable.")
         except Exception as api_e:
@@ -46,28 +46,67 @@ def monitor_vegetation(location_input=None, latitude=None, longitude=None, veget
 
     combined_data = {}
     if sensor_data_available:
-        combined_data["ndvi"] = sensor_data
+        combined_data.update(sensor_data)
     if api_data_available:
-        combined_data["ndvi"] = api_data
+        combined_data.update(api_data)
 
-    analysis = {"alert": False, "message": "Vegetation health analysis complete.", "details": combined_data}
+    analysis = {"alert": False, "message": "Vegetation health analysis complete.", "details": combined_data, "ppe_recommendation": "Minimal PPE"}
+    if combined_data.get("ndvi", 1) < 0.2:
+        analysis["ppe_recommendation"] = "Eye and Skin Protection (for potential allergens or irritants)"
 
     if combined_data.get("ndvi", 1) < 0.3:
-        logging.warning(f"Unhealthy vegetation detected at {location_str}")
+        logging.warning(f"Low NDVI detected at {location_str}")
         analysis["alert"] = True
-        analysis["message"] = "Unhealthy vegetation detected."
-        analysis["details"]["ndvi"] = f"NDVI: {combined_data['ndvi']}"
+        analysis["message"] = "Low vegetation health."
+        analysis["details"]["ndvi"] = combined_data.get("ndvi")
+
+    if combined_data.get("leaf_area_index", 0) < 1.0:
+        logging.warning(f"Low leaf area index detected at {location_str}")
+        analysis["alert"] = True
+        analysis["message"] = "Low vegetation density."
+        analysis["details"]["leaf_area_index"] = combined_data.get("leaf_area_index")
+
+    if combined_data.get("canopy_cover", 0) < 50:
+        logging.warning(f"Low canopy cover detected at {location_str}")
+        analysis["alert"] = True
+        analysis["message"] = "Sparse vegetation cover."
+        analysis["details"]["canopy_cover"] = combined_data.get("canopy_cover")
+
+    if combined_data.get("stress_index", 0) > 0.5:
+        logging.warning(f"High vegetation stress detected at {location_str}")
+        analysis["alert"] = True
+        analysis["message"] = "Vegetation stress detected."
+        analysis["details"]["stress_index"] = combined_data.get("stress_index")
+
+    if combined_data.get("species_diversity", 0) < 5:
+        logging.warning(f"Low species diversity detected at {location_str}")
+        analysis["alert"] = True
+        analysis["message"] = "Low species diversity."
+        analysis["details"]["species_diversity"] = combined_data.get("species_diversity")
+
     analysis["location"] = location
 
     return analysis
 
-def get_ndvi_from_sensor():
+def get_vegetation_sensor_data():
     # Replace with real sensor data retrieval
-    return 0.5
+    return {
+        "ndvi": 0.6,
+        "leaf_area_index": 2.5,
+        "canopy_cover": 70,
+        "stress_index": 0.2,
+        "species_diversity": 8,
+    }
 
 def get_vegetation_api_data(location, api_key):
     # Replace with real API call
-    return 0.55
+    return {
+        "ndvi": 0.65,
+        "leaf_area_index": 2.7,
+        "canopy_cover": 75,
+        "stress_index": 0.22,
+        "species_diversity": 9,
+    }
 
 def get_vegetation_data(location, api_key):
     url = f"https://api.example-vegetation.com/vegetation?q={location}&appid={api_key}"
