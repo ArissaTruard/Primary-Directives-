@@ -92,7 +92,7 @@ def monitor_fauna(location_input=None, latitude=None, longitude=None, fauna_api_
     if api_data_available:
         combined_data.update(api_data)
 
-    analysis = {"alert": False, "message": "Fauna monitoring complete.", "details": combined_data}
+    analysis = {"alert": False, "message": "Fauna monitoring complete.", "details": combined_data, "ppe_recommendation": "Minimal PPE"}
 
     if combined_data.get("species_diversity", 0) < 5:
         logging.warning(f"Low species diversity detected at {location_str}")
@@ -105,12 +105,14 @@ def monitor_fauna(location_input=None, latitude=None, longitude=None, fauna_api_
         analysis["alert"] = True
         analysis["message"] = "Invasive species present."
         analysis["details"]["invasive_species"] = combined_data.get("invasive_species")
+        analysis["ppe_recommendation"] = "Gloves and Wash hands after contact"
 
     if combined_data.get("endangered_species", False):
         logging.warning(f"Endangered species detected at {location_str}")
         analysis["alert"] = True
         analysis["message"] = "Endangered species present."
         analysis["details"]["endangered_species"] = combined_data.get("endangered_species")
+        analysis["ppe_recommendation"] = "Avoid contact, keep distance"
 
     # Database Integration
     create_fauna_database()  # Ensure database exists
