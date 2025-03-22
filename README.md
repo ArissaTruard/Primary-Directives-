@@ -1,6 +1,9 @@
+# IMPORTANT!!
+- This file is outdated
+- This code is extensively interconnected
+- !This code is NOT ready for use!
 # Primary Directives Application
 
-- this file may be somewhat outdated-
   
 This application implements a Flask-based API designed to process requests, enforce rules, and manage data corrections. It incorporates features like database interaction, model loading, system metrics, and error handling.
 
