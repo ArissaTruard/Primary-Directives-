@@ -50,7 +50,7 @@ def monitor_light_levels(location_input=None, latitude=None, longitude=None, lig
     if api_data_available:
         combined_data.update(api_data)
 
-    analysis = {"alert": False, "message": "Light level monitoring complete.", "details": combined_data}
+    analysis = {"alert": False, "message": "Light level monitoring complete.", "details": combined_data, "ppe_recommendation": "Minimal PPE"}
 
     if combined_data.get("illuminance", 0) < 50:
         logging.warning(f"Low illuminance detected at {location_str}")
@@ -63,6 +63,7 @@ def monitor_light_levels(location_input=None, latitude=None, longitude=None, lig
         analysis["alert"] = True
         analysis["message"] = "High UV index detected."
         analysis["details"]["uv_index"] = f"UV Index: {combined_data['uv_index']}"
+        analysis["ppe_recommendation"] = "Eye Protection (UV protective glasses)"
 
     analysis["location"] = location
 
