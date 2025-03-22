@@ -1,8 +1,7 @@
 # environmental_communication.py
 """
 This module monitors environmental data from various sensors, detects sudden changes,
-and reports them to relevant agencies. It also forwards sensor data to agencies for
-modeling purposes.
+reports them to relevant agencies, and provides enhanced analysis and predictions.
 
 Dependencies:
     - air_quality_monitor.py
@@ -16,25 +15,16 @@ Dependencies:
     - pollen_monitor.py
     - radiation_alerts.py
     - radon_monitor.py
+    - sub_environmental.py
+    - sub_environmental_analysis.py
     - requests (for simulating agency communication)
 """
 
 import logging
 import datetime
-import requests  # For simulating agency communication
-
-# Import monitor functions from other modules
-from air_quality_monitor import monitor_air_quality
-from soil_quality_monitor import monitor_soil_quality
-from vegetation_monitor import monitor_vegetation
-from water_quality_monitor import monitor_water_quality
-from weather import monitor_weather
-from fauna_monitor import monitor_fauna
-from light_monitor import monitor_light_levels
-from noise_monitor import monitor_noise_levels
-from pollen_monitor import monitor_pollen_levels
-from radiation_alerts import monitor_radiation_levels
-from radon_monitor import monitor_radon_levels
+import requests
+from sub_environmental import Environment  # Import Environment class
+from sub_environmental_analysis import analyze_environmental_risks, assess_habitat_suitability, predict_environmental_changes, generate_environmental_report
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
@@ -49,13 +39,14 @@ AGENCY_ENDPOINTS = {
     "noise": "https://simulated-agency.com/noise",
     "pollen": "https://simulated-agency.com/pollen",
     "radiation": "https://simulated-agency.com/radiation",
-    "radon": "https://simulated-agency.com/radon"
+    "radon": "https://simulated-agency.com/radon",
+    "environmental_report": "https://simulated-agency.com/report" #Added for report generation
 }
 
 # Thresholds for sudden changes (adjust as needed)
 CHANGE_THRESHOLDS = {
     "air_quality": {"pm25": 50, "pm10": 100, "vocs": 100},
-    "soil_quality": {"ph": 1, "nitrogen": 50, "phosphorus": 30, "potassium":100},
+    "soil_quality": {"ph": 1, "nitrogen": 50, "phosphorus": 30, "potassium": 100},
     "water_quality": {"ph": 1, "turbidity": 3, "dissolved_oxygen": 2, "conductivity": 500},
     "weather": {"temperature": 5, "humidity": 10, "precipitation": 10, "wind_speed": 10, "uv": 2},
     "fauna": {"species_diversity": 3},
@@ -82,14 +73,14 @@ def send_data_to_agency(agency, data):
     """
     try:
         response = requests.post(AGENCY_ENDPOINTS[agency], json=data)
-        response.raise_for_status()  # Raise an exception for bad status codes
+        response.raise_for_status()
         logging.info(f"Data sent to {agency} agency: {data}")
     except requests.exceptions.RequestException as e:
         logging.error(f"Failed to send data to {agency} agency: {e}")
 
 def monitor_and_report(location_input, weather_api_key=None, soil_api_key=None, vegetation_api_key=None, water_api_key=None, fauna_api_key=None, light_api_key=None, noise_api_key=None, pollen_api_key=None, radiation_api_key=None, radon_api_key=None):
     """
-    Monitors environmental data, detects sudden changes, and reports to relevant agencies.
+    Monitors environmental data, detects sudden changes, reports to agencies, and generates reports.
 
     Args:
         location_input (str): The location for which to monitor environmental data.
@@ -105,18 +96,21 @@ def monitor_and_report(location_input, weather_api_key=None, soil_api_key=None, 
         radon_api_key (str, optional): API key for radon data. Defaults to None.
     """
 
+    # Create Environment object
+    env = Environment(location_input=location_input, weather_api_key=weather_api_key, soil_api_key=soil_api_key, vegetation_api_key=vegetation_api_key, water_api_key=water_api_key, fauna_api_key=fauna_api_key, light_api_key=light_api_key, noise_api_key=noise_api_key, pollen_api_key=pollen_api_key, radiation_api_key=radiation_api_key, radon_api_key=radon_api_key)
+
     # Get current sensor data
-    air_data = monitor_air_quality(location_input, weather_api_key)
-    soil_data = monitor_soil_quality(location_input, soil_api_key)
-    vegetation_data = monitor_vegetation(location_input, vegetation_api_key)
-    water_data = monitor_water_quality(location_input, water_api_key)
-    weather_data = monitor_weather(location_input, weather_api_key)
-    fauna_data = monitor_fauna(location_input, fauna_api_key)
-    light_data = monitor_light_levels(location_input, light_api_key)
-    noise_data = monitor_noise_levels(location_input, noise_api_key)
-    pollen_data = monitor_pollen_levels(location_input, pollen_api_key)
-    radiation_data = monitor_radiation_levels(location_input, radiation_api_key)
-    radon_data = monitor_radon_levels(location_input, radon_api_key)
+    air_data = env.get_air_quality_data()
+    soil_data = env.get_soil_quality_data()
+    vegetation_data = env.get_vegetation_data()
+    water_data = env.get_water_quality_data()
+    weather_data = env.get_weather_data()
+    fauna_data = env.get_fauna_data()
+    light_data = env.get_light_level()
+    noise_data = env.get_noise_data()
+    pollen_data = env.get_pollen_data()
+    radiation_data = env.get_radiation_data()
+    radon_data = env.get_radon_data()
 
     all_data = {
         "air_quality": air_data,
@@ -148,7 +142,15 @@ def monitor_and_report(location_input, weather_api_key=None, soil_api_key=None, 
         if data and data.get("details"):
             send_data_to_agency(sensor, {"location": location_input, "data": data["details"]})
 
+    # Generate and send environmental report
+    report = generate_environmental_report(env)
+    send_data_to_agency("environmental_report", {"location": location_input, "report": report})
+
 # Example usage
 if __name__ == "__main__":
     location = "London"
-    monitor_and_report(location, weather_api_key="YOUR_WEATHER_API_KEY", soil_api_key="YOUR_SOIL_API_KEY", vegetation_api_key = "YOUR_VEGETATION_API_KEY", water_api_key = "YOUR_WATER_API_KEY", fauna_api_key = "YOUR_FAUNA_API_KEY", light_api_key = "YOUR_LIGHT_API_KEY", noise_api_key = "YOUR_NOISE_API_KEY", pollen_api_key = "YOUR_POLLEN_API_KEY", radiation_api_key = "YOUR_RADIATION_API_KEY", radon_api_key = "YOUR_RADON_API_KEY")
+    monitor_and_report(location, weather_api_key="YOUR_WEATHER_API_KEY", soil_api_key="YOUR_SOIL_API_KEY", vegetation_api_key="YOUR_VEGETATION_API_KEY",
+        water_api_key="YOUR_WATER_API_KEY", fauna_api_key="YOUR_FAUNA_API_KEY", light_api_key="YOUR_LIGHT_API_KEY",
+        noise_api_key="YOUR_NOISE_API_KEY", pollen_api_key="YOUR_POLLEN_API_KEY",
+        radiation_api_key="YOUR_RADIATION_API_KEY", radon_api_key="YOUR_RADON_API_KEY")
+
