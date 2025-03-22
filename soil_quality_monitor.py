@@ -1,102 +1,136 @@
-# --- soil_quality_monitor.py ---
+# soil_quality_monitor.py
 import logging
 import datetime
 from typing import Optional, Dict
+from sub_location import get_location_from_address, get_address_from_location
+import requests
+import json
+
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 def monitor_soil_quality(
-    moisture: Optional[float] = None,
-    temperature: Optional[float] = None,
-    location: str = "unknown",
-    ph: Optional[float] = None,
-    nitrogen: Optional[float] = None,
-    phosphorus: Optional[float] = None,
-    potassium: Optional[float] = None,
-    heavy_metals: Optional[Dict[str, float]] = None,
-    pesticides: Optional[Dict[str, float]] = None,
+    location_input: Optional[str] = None,
     latitude: Optional[float] = None,
     longitude: Optional[float] = None,
+    soil_api_key: Optional[str] = None,
 ) -> Dict[str, any]:
-    """
-    Monitors and analyzes soil moisture, temperature, pH, nutrients, heavy metals, and pesticides.
-
-    Args:
-        moisture: Soil moisture percentage (optional).
-        temperature: Soil temperature in Celsius (optional).
-        location: Location of the soil sensor (default: "unknown").
-        ph: Soil pH level (optional).
-        nitrogen: Nitrogen content in the soil (mg/kg) (optional).
-        phosphorus: Phosphorus content in the soil (mg/kg) (optional).
-        potassium: Potassium content in the soil (mg/kg) (optional).
-        heavy_metals: Dictionary of heavy metal concentrations (e.g., {"lead": 10, "arsenic": 5}) (optional).
-        pesticides: Dictionary of pesticide concentrations (optional).
-        latitude: Latitude of the soil testing location (optional).
-        longitude: Longitude of the soil testing location (optional).
-
-    Returns:
-        A dictionary containing the analysis results, including location data. Example:
-        {
-            "alert": True,
-            "message": "Low soil moisture detected. High lead concentration detected.",
-            "details": {
-                "moisture": "Moisture: 15%",
-                "lead": "lead: 12"
-            },
-            "location": {"latitude": 34.0522, "longitude": -118.2437"} #or {"location_name": "My Garden"}
-        }
-    """
     timestamp = datetime.datetime.now()
-    logging.info(
-        f"Soil data at {location}: Moisture={moisture}, Temperature={temperature}, pH={ph}, "
-        f"Nitrogen={nitrogen}, Phosphorus={phosphorus}, Potassium={potassium}, "
-        f"Heavy Metals={heavy_metals}, Pesticides={pesticides}, Latitude={latitude}, Longitude={longitude}"
-    )
+    location = get_location_from_address(location_input) if location_input else get_address_from_location(latitude, longitude) if latitude and longitude else None
 
-    analysis = {"alert": False, "message": "Soil conditions normal", "details": {}}
+    if not location:
+        logging.error("Location not provided or could not be determined.")
+        return {"alert": True, "message": "Location error", "details": {}}
+
+    location_str = location.get("address") if location.get("address") else f"Lat: {location.get('latitude')}, Lng: {location.get('longitude')}"
+
+    sensor_data_available = False
+    api_data_available = False
+
+    try:
+        sensor_data = get_soil_sensor_data()
+        if sensor_data:
+            sensor_data_available = True
+            logging.info(f"Soil sensor data at {location_str}: {sensor_data}")
+        else:
+            logging.warning("Sensor data unavailable.")
+    except Exception as e:
+        logging.warning(f"Error reading sensor data: {e}")
+
+    if not sensor_data_available:
+        try:
+            api_data = get_soil_api_data(location_str, soil_api_key)
+            if api_data:
+                api_data_available = True
+                logging.info(f"Soil API data at {location_str}: {api_data}")
+            else:
+                logging.warning("API data unavailable.")
+        except Exception as api_e:
+            logging.error(f"Error using API data: {api_e}")
+
+    if not sensor_data_available and not api_data_available:
+        return {"alert": True, "message": "No soil quality data available.", "details": {}}
+
+    combined_data = {}
+    if sensor_data_available:
+        combined_data.update(sensor_data)
+    if api_data_available:
+        combined_data.update(api_data)
+
+    analysis = {"alert": False, "message": "Soil conditions analysis complete.", "details": combined_data}
     alerts = []
 
-    if moisture is not None and moisture < 20:
+    if combined_data.get("moisture", None) is not None and combined_data.get("moisture", 0) < 20:
         alerts.append("Low soil moisture detected.")
-        analysis["details"]["moisture"] = f"Moisture: {moisture}%"
-
-    if temperature is not None and temperature > 35:
+        analysis["details"]["moisture"] = f"Moisture: {combined_data.get('moisture')}%"
+    if combined_data.get("temperature", None) is not None and combined_data.get("temperature", 0) > 35:
         alerts.append("High soil temperature detected.")
-        analysis["details"]["temperature"] = f"Temperature: {temperature}°C"
-
-    if ph is not None and (ph < 5.5 or ph > 7.5):
+        analysis["details"]["temperature"] = f"Temperature: {combined_data.get('temperature')}°C"
+    if combined_data.get("ph", None) is not None and (combined_data.get("ph", 0) < 5.5 or combined_data.get("ph", 0) > 7.5):
         alerts.append("Soil pH level is outside the optimal range.")
-        analysis["details"]["ph"] = f"pH: {ph}"
-
-    if nitrogen is not None and nitrogen < 50:
+        analysis["details"]["ph"] = f"pH: {combined_data.get('ph')}"
+    if combined_data.get("nitrogen", None) is not None and combined_data.get("nitrogen", 0) < 50:
         alerts.append("Low nitrogen content detected.")
-        analysis["details"]["nitrogen"] = f"Nitrogen: {nitrogen} mg/kg"
-
-    if phosphorus is not None and phosphorus < 20:
+        analysis["details"]["nitrogen"] = f"Nitrogen: {combined_data.get('nitrogen')} mg/kg"
+    if combined_data.get("phosphorus", None) is not None and combined_data.get("phosphorus", 0) < 20:
         alerts.append("Low phosphorus content detected.")
-        analysis["details"]["phosphorus"] = f"Phosphorus: {phosphorus} mg/kg"
-
-    if potassium is not None and potassium < 100:
+        analysis["details"]["phosphorus"] = f"Phosphorus: {combined_data.get('phosphorus')} mg/kg"
+    if combined_data.get("potassium", None) is not None and combined_data.get("potassium", 0) < 100:
         alerts.append("Low potassium content detected.")
-        analysis["details"]["potassium"] = f"Potassium: {potassium} mg/kg"
-
-    if heavy_metals:
-        for metal, concentration in heavy_metals.items():
+        analysis["details"]["potassium"] = f"Potassium: {combined_data.get('potassium')} mg/kg"
+    if combined_data.get("heavy_metals", None):
+        for metal, concentration in combined_data["heavy_metals"].items():
             if concentration is not None and concentration > 10:
                 alerts.append(f"High {metal} concentration detected.")
                 analysis["details"][metal] = f"{metal}: {concentration}"
-
-    if pesticides:
-        for pesticide, concentration in pesticides.items():
+    if combined_data.get("pesticides", None):
+        for pesticide, concentration in combined_data["pesticides"].items():
             if concentration is not None and concentration > 5:
                 alerts.append(f"High {pesticide} concentration detected.")
                 analysis["details"][pesticide] = f"{pesticide}: {concentration}"
-
     if alerts:
         analysis["alert"] = True
         analysis["message"] = " ".join(alerts)
 
-    if latitude is not None and longitude is not None:
-        analysis["location"] = {"latitude": latitude, "longitude": longitude}
-    elif location != "unknown":
-        analysis["location"] = {"location_name": location}
+    analysis["location"] = location
 
     return analysis
+
+def get_soil_sensor_data():
+    # Replace with real sensor data retrieval
+    return {
+        "moisture": 30,
+        "temperature": 25,
+        "ph": 6.5,
+        "nitrogen": 60,
+        "phosphorus": 30,
+        "potassium": 120,
+        "heavy_metals": {"lead": 5, "mercury": 2},
+        "pesticides": {"atrazine": 3, "glyphosate": 1},
+    }
+
+def get_soil_api_data(location, api_key):
+    # Replace with real API call
+    return {
+        "moisture": 32,
+        "temperature": 26,
+        "ph": 6.6,
+        "nitrogen": 62,
+        "phosphorus": 32,
+        "potassium": 122,
+        "heavy_metals": {"lead": 6, "mercury": 2.5},
+        "pesticides": {"atrazine": 3.5, "glyphosate": 1.2},
+    }
+
+def get_soil_data(location, api_key):
+    url = f"https://api.example-soil-data.com/soil?q={location}&appid={api_key}"
+    try:
+        response = requests.get(url)
+        response.raise_for_status()
+        soil_data = response.json()
+        return soil_data
+    except requests.exceptions.RequestException as e:
+        logging.error(f"Soil API request failed: {e}")
+        return {"error": str(e)}
+    except json.JSONDecodeError:
+        logging.error("Invalid JSON response from soil API")
+        return {"error": "Invalid JSON response"}
