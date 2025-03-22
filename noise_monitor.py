@@ -50,7 +50,7 @@ def monitor_noise_levels(location_input=None, latitude=None, longitude=None, noi
     if api_data_available:
         combined_data.update(api_data)
 
-    analysis = {"alert": False, "message": "Noise level monitoring complete.", "details": combined_data}
+    analysis = {"alert": False, "message": "Noise level monitoring complete.", "details": combined_data, "ppe_recommendation": "Minimal PPE"}
 
     if combined_data.get("decibels", 0) > 70:
         logging.warning(f"High noise levels detected at {location_str}")
@@ -60,6 +60,9 @@ def monitor_noise_levels(location_input=None, latitude=None, longitude=None, noi
 
     if combined_data.get("frequency_range"):
         analysis["details"]["frequency_range"] = combined_data["frequency_range"]
+
+    if combined_data.get("decibels", 0) > 85:
+        analysis["ppe_recommendation"] = "Hearing Protection (earplugs or earmuffs)"
 
     analysis["location"] = location
 
