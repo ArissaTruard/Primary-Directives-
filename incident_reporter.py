@@ -1,4 +1,4 @@
-# incident_reporter.py
+# --- incident_reporter.py ---
 import os
 import time
 import datetime
@@ -6,8 +6,10 @@ import logging
 import json
 import geocoder
 import platform
+import uuid
+from sub_database import add_incident_report, get_applicable_laws #Import database functions
 
-def report_illegal_action(event_details, audio_file=None, video_file=None, electronic_log=None):
+def report_illegal_action(event_details, audio_file=None, video_file=None, electronic_log=None, sensor_data=None):
     """
     Reports an illegal action to the appropriate authorities, including event details,
     time, date, location, and relevant media.
@@ -17,27 +19,22 @@ def report_illegal_action(event_details, audio_file=None, video_file=None, elect
         audio_file (str, optional): The file path to an audio recording related to the event.
         video_file (str, optional): The file path to a video recording related to the event.
         electronic_log (str, optional): The file path to an electronic log file documenting the event.
+        sensor_data (dict, optional): Additional sensor data related to the incident.
 
     Returns:
         None. The function logs the report and attempts to send it to authorities.
 
     Raises:
         Exception: If an error occurs during the reporting process.
-
-    Example:
-        report_illegal_action(
-            event_details="Suspicious activity observed near bank.",
-            audio_file="audio_recording.wav",
-            video_file="video_surveillance.mp4",
-            electronic_log="system_log.txt"
-        )
     """
     try:
         timestamp = datetime.datetime.now().isoformat()
         location_data = _get_location_data()
         identity_data = _get_identity_data()
+        report_id = str(uuid.uuid4())
 
         report_data = {
+            "report_id": report_id,
             "timestamp": timestamp,
             "location": location_data,
             "event_details": event_details,
@@ -50,19 +47,21 @@ def report_illegal_action(event_details, audio_file=None, video_file=None, elect
             report_data["video_file"] = video_file
         if electronic_log and os.path.exists(electronic_log):
             report_data["electronic_log"] = electronic_log
+        if sensor_data:
+            report_data["sensor_data"] = sensor_data
 
-        # Placeholder for actual reporting mechanism (e.g., API call to police)
-        print(f"Reporting illegal action: {json.dumps(report_data, indent=4)}") #for testing, print the data.
+        print(f"Reporting illegal action: {json.dumps(report_data, indent=4)}")
         log_event(f"Reported illegal action: {json.dumps(report_data)}")
 
-        # Add logic to send the report to the proper authority
-        # Example : send_report_to_police(report_data)
-        # This will need to be implemented depending on the system.
+        # Database integration:
+        add_incident_report(report_data) #Store the report in the database
+        applicable_laws = get_applicable_laws(location_data) #Get applicable laws
+        print(f"Applicable Laws: {applicable_laws}") #Print applicable laws.
 
     except Exception as e:
         logging.error(f"Error reporting illegal action: {e}")
         log_event(f"Error reporting illegal action: {e}")
-        raise #re-raise to not lose error information.
+        raise
 
 def _get_location_data():
     """
@@ -138,7 +137,7 @@ def log_event(event):
             f.write(f"{datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}: {event}\n")
     except Exception as e:
         logging.error(f"Error logging event: {e}")
-        raise #re-raise to not lose error information.
+        raise
 
 # Example usage (for testing):
 if __name__ == "__main__":
@@ -146,5 +145,6 @@ if __name__ == "__main__":
         event_details="Suspicious activity observed near bank.",
         audio_file="audio_recording.wav",
         video_file="video_surveillance.mp4",
-        electronic_log="system_log.txt"
+        electronic_log="system_log.txt",
+        sensor_data={"temperature": 25.5, "humidity": 60}
     )
