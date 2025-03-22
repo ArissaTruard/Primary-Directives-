@@ -1,14 +1,13 @@
 # air_quality_monitor.py
 import logging
 import datetime
+from sub_location import get_location_from_address, get_address_from_location
 import requests
 import json
-from sub_location import get_location_from_address, get_address_from_location
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
-def monitor_air_quality(location_input, weather_api_key=None, latitude=None, longitude=None):
-    """Monitors and analyzes air quality data from sensors, integrating location and weather."""
+def monitor_air_quality(location_input=None, latitude=None, longitude=None, weather_api_key=None):
     timestamp = datetime.datetime.now()
     location = get_location_from_address(location_input) if location_input else get_address_from_location(latitude, longitude) if latitude and longitude else None
 
@@ -21,7 +20,6 @@ def monitor_air_quality(location_input, weather_api_key=None, latitude=None, lon
     sensor_data_available = False
     api_data_available = False
 
-    # Try to get sensor data
     try:
         sensor_data = get_air_quality_sensor_data()
         if sensor_data:
@@ -32,10 +30,9 @@ def monitor_air_quality(location_input, weather_api_key=None, latitude=None, lon
     except Exception as e:
         logging.warning(f"Error reading sensor data: {e}")
 
-    # Try to get API data if sensor data is unavailable or supplement with API data if available
     if not sensor_data_available:
         try:
-            api_data = get_air_quality_api_data(location_str) # Replace with real API
+            api_data = get_air_quality_api_data(location_str, weather_api_key)
             if api_data:
                 api_data_available = True
                 logging.info(f"Air quality API data at {location_str}: {api_data}")
@@ -53,34 +50,73 @@ def monitor_air_quality(location_input, weather_api_key=None, latitude=None, lon
     if api_data_available:
         combined_data.update(api_data)
 
-    analysis = {"alert": False, "message": "Air quality analysis complete.", "details": combined_data}
+    analysis = {"alert": False, "message": "Air quality analysis complete.", "details": combined_data, "ppe_recommendation": "Minimal PPE"}
 
-    if combined_data.get("pm25", 0) > 50 or combined_data.get("pm10", 0) > 100 or combined_data.get("vocs", 0) > 100:
-        logging.warning(f"High air pollution levels detected at {location_str}")
+    if combined_data.get("pm25", 0) > 50 or combined_data.get("pm10", 0) > 100:
         analysis["alert"] = True
         analysis["message"] = "High pollution levels detected"
+        analysis["ppe_recommendation"] = "Respiratory Protection (N95 mask)"
+    if combined_data.get("vocs", 0) > 100:
+        analysis["ppe_recommendation"] = "Respiratory Protection (full face respirator) and eye protection"
 
-    if weather_api_key:
-        try:
+    try:
+        location_data = location
+        if location_data and weather_api_key:
             weather_data = get_weather_data(location_str, weather_api_key)
-            logging.info(f"Weather data: {weather_data}")
-            analysis["details"]["weather"] = weather_data
-        except Exception as e:
-            logging.error(f"Error fetching weather data: {e}")
-            analysis["details"]["weather_error"] = str(e)
+            if weather_data and weather_data.get('main') and weather_data.get('main').get('humidity'):
+                combined_data['humidity'] = weather_data['main']['humidity']
+            if weather_data and weather_data.get('wind') and weather_data.get('wind').get('speed'):
+                combined_data['wind_speed'] = weather_data['wind']['speed']
+        else:
+            logging.warning(f"Location data or weather API key not found for {location_str}.")
+    except Exception as e:
+        logging.error(f"Error integrating weather data: {e}")
+        combined_data['weather_error'] = str(e)
+
+    analysis["location"] = location
 
     return analysis
 
 def get_air_quality_sensor_data():
     # Replace with real sensor data retrieval
-    return {"pm25": 10, "pm10": 20, "vocs": 30, "o3": 5, "no2": 2, "so2": 1, "co": 3}
+    return {
+        "pm25": 30,
+        "pm10": 60,
+        "vocs": 50,
+        "co": 5,
+        "o3": 20,
+        "no2": 10,
+        "so2": 5,
+    }
 
-def get_air_quality_api_data(location):
+def get_air_quality_api_data(location, api_key):
     # Replace with real API call
-    return {"pm25": 15, "pm10": 25, "vocs": 35}
+    return {
+        "pm25": 35,
+        "pm10": 65,
+        "vocs": 55,
+        "co": 6,
+        "o3": 22,
+        "no2": 12,
+        "so2": 6,
+    }
+
+def get_air_quality_data(location, api_key):
+    url = f"https://api.example-air-quality.com/air?q={location}&appid={api_key}"
+    try:
+        response = requests.get(url)
+        response.raise_for_status()
+        air_data = response.json()
+        return air_data
+    except requests.exceptions.RequestException as e:
+        logging.error(f"Air quality API request failed: {e}")
+        return {"error": str(e)}
+    except json.JSONDecodeError:
+        logging.error("Invalid JSON response from air quality API")
+        return {"error": "Invalid JSON response"}
 
 def get_weather_data(location, api_key):
-    url = f"https://api.weatherapi.com/v1/current.json?key={api_key}&q={location}"
+    url = f"https://api.openweathermap.org/data/2.5/weather?q={location}&appid={api_key}"
     try:
         response = requests.get(url)
         response.raise_for_status()
