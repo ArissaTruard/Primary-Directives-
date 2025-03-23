@@ -1,8 +1,19 @@
 TOLERANCES = {
-    "temperature": 20,  # Degrees Celsius (comfortable spring)
-    "humidity": 50,     # Percentage (comfortable spring)
-    "uv_index": 4,      # Moderate UV index
-    "allergen_density": 2, # Low allergen levels
-    "air_quality": 30,  # Good air quality (AQI)
-    "radiation_level": 0.0001,  # Sieverts (background)
+    "temperature": {"value": 20, "units": "°C"},
+    "humidity": {"value": 50, "units": "%"},
+    "uv_index": {"value": 4, "units": "UV Index"},
+    "allergen_density": {"value": 2, "units": "Pollen Count"},  # More specific units needed
+    "air_quality": {"value": 30, "units": "AQI"},
+    "radiation_level": {"value": 20, "units": "µSv/h"},  # Background radiation in US averages around 20 µSv/h
 }
+
+"""
+TOLERANCES:
+This dictionary defines baseline or acceptable ranges for various environmental conditions.
+These values are used in conjunction with the CONDITIONS dictionary to determine when
+environmental readings exceed acceptable levels and trigger alerts.
+
+Location Context:
+These values are generally representative of a comfortable spring day in the United States.
+Background radiation levels are based on average readings in the US.
+"""
