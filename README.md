@@ -2,6 +2,7 @@
 - This file is outdated
 - This code is extensively interconnected
 - !This code is NOT ready for use!
+- some of the code has documentation and docstrings to help implement it but not all.
 # Primary Directives Application
 
   
