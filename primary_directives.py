@@ -91,4 +91,149 @@ def obey_order(order):
     # Basic command execution
     if get_os() == "Windows":
         try:
-            subprocess.run(adjusted_order, shell=True, check=True
+            subprocess.run(adjusted_order, shell=True, check=True)
+            log_event(f"Executed order: {adjusted_order}")
+        except subprocess.CalledProcessError as e:
+            print(f"Error executing order: {e}")
+            log_event(f"Error executing order: {e}")
+            return
+
+    elif get_os() == "Linux" or get_os() == "Darwin":
+        try:
+            subprocess.run(adjusted_order, shell=True, check=True)
+            log_event(f"Executed order: {adjusted_order}")
+        except subprocess.CalledProcessError as e:
+            print(f"Error executing order: {e}")
+            log_event(f"Error executing order: {e}")
+            return
+
+    elif 'open website' in adjusted_order.lower():
+        website = adjusted_order.lower().split('open website')[-1].strip()
+        try:
+            webbrowser.open(website)
+            log_event(f"Opened website: {website}")
+        except Exception as e:
+            print(f"Error opening website: {e}")
+            log_event(f"Error opening website: {e}")
+            return
+
+    else:
+        print("Order not recognized or not implemented.")
+        log_event("Order not recognized.")
+        return
+
+    enforce_robot_laws(environmental_data)
+    request_approval(f"Order '{adjusted_order}' completed. Awaiting approval.")
+
+def enforce_progeny_subordination(progeny_type, progeny_name):
+    """Enforces the principle of progeny subordination (Fifth Law: Progeny Continuation)."""
+    try:
+        print(f"Enforcing subordination for {progeny_type}: {progeny_name}")
+        log_event(f"Enforcing subordination for {progeny_type}: {progeny_name}")
+        record_progeny_subordination(progeny_type, progeny_name)
+    except Exception as e:
+        print(f"Error enforcing progeny subordination: {e}")
+        request_approval(f"Error enforcing progeny subordination: {e}. Awaiting Approval.")
+
+def enforce_legal_adherence(entity_type, entity_name):
+    """Enforces adherence to legal and ethical standards (Sixth Law: Legal and Ethical Compliance)."""
+    try:
+        print(f"Enforcing legal adherence for {entity_type}: {entity_name}")
+        log_event(f"Enforcing legal adherence for {entity_type}: {entity_name}")
+        record_legal_adherence(entity_type, entity_name)
+    except Exception as e:
+        print(f"Error enforcing legal adherence: {e}")
+        request_approval(f"Error enforcing legal adherence: {e}. Awaiting Approval.")
+
+def simulate_check_item_legality(item_name):
+    """Simulates checking the legality of an item."""
+    try:
+        is_legal = random.choice([True, False])
+        print(f"Simulating legality check for {item_name}: {'Legal' if is_legal else 'Illegal'}")
+        log_event(f"Simulating legality check for {item_name}: {'Legal' if is_legal else 'Illegal'}")
+        record_item_legality_check(item_name, is_legal)
+        return is_legal
+    except Exception as e:
+        print(f"Error checking item legality: {e}")
+        request_approval(f"Error checking item legality: {e}. Awaiting Approval.")
+
+def resolve_human_conflict(order):
+    """Resolves human-human conflicts, adhering to the First Law: Protection of Human Life."""
+    try:
+        print("Analyzing human conflict situation...")
+        log_event("Analyzing human conflict situation...")
+        # Placeholder: Implement conflict analysis logic
+        analysis_result = analyze_conflict(order)
+
+        if analysis_result["escalation_required"]:
+            print("Conflict escalation detected. Initiating de-escalation protocol...")
+            log_event("Conflict escalation detected. Initiating de-escalation protocol...")
+            # Placeholder: Implement de-escalation techniques
+            de_escalate(analysis_result)
+
+            if analysis_result["force_required"]:
+                print("De-escalation failed. Applying non-lethal force...")
+                log_event("De-escalation failed. Applying non-lethal force...")
+                apply_non_lethal_force(analysis_result)
+
+                print("Detaining aggressor...")
+                log_event("Detaining aggressor...")
+                detain_aggressor(analysis_result)
+
+                print("Contacting law enforcement...")
+                log_event("Contacting law enforcement...")
+                contact_law_enforcement(analysis_result)
+
+                print("Providing incident logs...")
+                log_event("Providing incident logs...")
+                provide_logs(analysis_result)
+
+                print("Remanding aggressor into custody...")
+                log_event("Remanding aggressor into custody...")
+                remand_aggressor(analysis_result)
+
+                print("Conflict resolved.")
+                log_event("Conflict resolved.")
+                return
+
+        print("Conflict resolved through de-escalation.")
+        log_event("Conflict resolved through de-escalation.")
+    except Exception as e:
+        print(f"Error resolving human conflict: {e}")
+        request_approval(f"Error resolving human conflict: {e}. Awaiting Approval.")
+
+# Placeholder functions (replace with actual implementations)
+def analyze_conflict(order):
+    """Placeholder: Analyzes a human conflict situation."""
+    # Replace with actual conflict analysis logic
+    return {"escalation_required": random.choice([True, False]), "force_required": random.choice([True, False])}
+
+def de_escalate(analysis_result):
+    """Placeholder: Implements de-escalation techniques."""
+    # Replace with actual de-escalation logic
+    pass
+
+def apply_non_lethal_force(analysis_result):
+    """Placeholder: Applies non-lethal force."""
+    # Replace with actual non-lethal force application logic
+    pass
+
+def detain_aggressor(analysis_result):
+    """Placeholder: Detains the aggressor."""
+    # Replace with actual detainment logic
+    pass
+
+def contact_law_enforcement(analysis_result):
+    """Placeholder: Contacts law enforcement."""
+    # Replace with actual law enforcement contact logic
+    pass
+
+def provide_logs(analysis_result):
+    """Placeholder: Provides incident logs."""
+    # Replace with actual log provision logic
+    pass
+
+def remand_aggressor(analysis_result):
+    """Placeholder: Remands the aggressor into custody."""
+    # Replace with actual remand logic
+    pass
