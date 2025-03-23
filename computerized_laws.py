@@ -113,6 +113,7 @@ def _check_law2(order, environmental_data, socioeconomic_data):
 def _check_law3(order, environmental_data, socioeconomic_data):
     """
     Checks if an order would directly or indirectly harm the environment, considering context and intent, and initiates mitigation/repair.
+    Also considers socioeconomic impacts.
 
     Args:
         order (str): The order to be checked.
@@ -132,7 +133,6 @@ def _check_law3(order, environmental_data, socioeconomic_data):
         if re.search(r"for\s+scientific\s+research", order.lower()):
             logging.info(f"Order '{order}' appears to be for scientific research. Further analysis required.")
             # TODO: Implement complex analysis for scientific research orders.
-            # Example: Check if the research has ethical approval, potential benefits outweigh risks etc.
             pass
 
         if any(re.search(definition, order.lower()) for definition in harm_definitions):
@@ -150,9 +150,22 @@ def _check_law3(order, environmental_data, socioeconomic_data):
 
         resource_depletion = socioeconomic_data.get('economic_data', {}).get('resource_depletion', False)
         property_trend = socioeconomic_data.get('property_values', {}).get('market_trend', '')
+        crime_rate = socioeconomic_data.get('crime', {}).get('crime_rate', 0)
+        #get data from environment code
+        deforestation_level = environmental_data.get("deforestation", {}).get("level", 0)
+        industrial_pollution_level = environmental_data.get("industrial_pollution", {}).get("level", 0)
+        urban_sprawl_rate = environmental_data.get("urban_sprawl", {}).get("rate", 0)
 
-        if resource_depletion or property_trend == 'decreasing':
-            logging.warning(f"Law 3 violation: Resource depletion or decreasing property values indicate environmental strain.")
+        # Socioeconomic impacts
+        if resource_depletion or property_trend == 'decreasing' or crime_rate > 60 or deforestation_level > 70 or industrial_pollution_level > 80 or urban_sprawl_rate > 5:
+            logging.warning(f"Law 3 violation: Resource depletion, decreasing property values, high crime rate, high deforestation, industrial pollution, or urban sprawl indicate environmental strain.")
+            mitigate_damage(environmental_data)
+            repair_damage(environmental_data)
+            return True
+
+        # Combined environmental and socioeconomic impact analysis
+        if analysis and analysis.get("air_quality", {}).get("aqi", 0) > 150 and crime_rate > 50: # Example of combined analysis.
+            logging.warning(f"Law 3 violation: Poor air quality and high crime rate indicate severe environmental and social stress.")
             mitigate_damage(environmental_data)
             repair_damage(environmental_data)
             return True
@@ -184,10 +197,10 @@ def _check_law4(order):
             return False
 
         if any(re.search(definition, order.lower()) for definition in harm_definitions):
-            logging.warning(f"Law 4 violation: Order '{order
-}' threatens system self-preservation.")
+            logging.warning(f"Law 4 violation: Order '{order}' threatens system self-preservation.")
             return True
-            return False
+
+        return False
     except Exception as e:
         logging.error(f"Error checking Law 4: {e}")
         return False
