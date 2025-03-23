@@ -1,20 +1,112 @@
 CONDITIONS = {
     "temperature": {
-        "high": {"threshold": TOLERANCES["temperature"] + 5, "warning": "High temperature detected.", "ppe": "Hydration, light clothing, wide-brimmed hat."},
-        "low": {"threshold": TOLERANCES["temperature"] - 10, "warning": "Low temperature detected.", "ppe": "Insulated clothing, layers, gloves, hat."},
+        "high": {
+            "threshold": TOLERANCES["temperature"]["value"] + 5,
+            "warning": "High temperature detected: Risk of heatstroke.",
+            "ppe": "Hydration, light clothing, wide-brimmed hat, seek shade.",
+            "units": "°C",
+        },
+        "low": {
+            "threshold": TOLERANCES["temperature"]["value"] - 10,
+            "warning": "Low temperature detected: Risk of hypothermia.",
+            "ppe": "Insulated clothing, layers, gloves, hat, minimize exposure.",
+            "units": "°C",
+        },
     },
     "humidity": {
-        "high": {"threshold": TOLERANCES["humidity"] + 25, "warning": "High humidity detected.", "ppe": "Breathable clothing, moisture-wicking fabrics."},
-        "low": {"threshold": TOLERANCES["humidity"] - 25, "warning": "Low humidity detected.", "ppe": "Moisturizer, lip balm, increased hydration."},
+        "high": {
+            "threshold": TOLERANCES["humidity"]["value"] + 25,
+            "warning": "High humidity detected: Risk of heat exhaustion.",
+            "ppe": "Breathable clothing, moisture-wicking fabrics, stay hydrated.",
+            "units": "%",
+        },
+        "low": {
+            "threshold": TOLERANCES["humidity"]["value"] - 25,
+            "warning": "Low humidity detected: Risk of dehydration and dry skin.",
+            "ppe": "Moisturizer, lip balm, increased hydration, humidifier.",
+            "units": "%",
+        },
     },
-    "uv_index": {"high": {"threshold": TOLERANCES["uv_index"] + 3, "warning": "High UV index detected.", "ppe": "Sunscreen, sunglasses, long sleeves, hat."}},
-    "allergen_density": {"high": {"threshold": TOLERANCES["allergen_density"] + 3, "warning": "High allergen density detected.", "ppe": "Mask, allergy medication, eye protection."}},
-    "air_quality": {"high": {"threshold": TOLERANCES["air_quality"] + 70, "warning": "Poor air quality detected.", "ppe": "N95 mask, avoid strenuous activity."}},
+    "uv_index": {
+        "high": {
+            "threshold": TOLERANCES["uv_index"]["value"] + 3,
+            "warning": "High UV index detected: Risk of sunburn and skin damage.",
+            "ppe": "Sunscreen (SPF 30+), sunglasses, long sleeves, hat, seek shade.",
+            "units": "UV Index",
+        },
+    },
+    "allergen_density": {
+        "high": {
+            "threshold": TOLERANCES["allergen_density"]["value"] + 3,
+            "warning": "High allergen density detected: Risk of allergic reactions.",
+            "ppe": "Mask (N95 recommended), allergy medication, eye protection, limit outdoor exposure.",
+            "units": "Pollen Count",  # More specific units needed
+        },
+    },
+    "air_quality": {
+        "high": {
+            "threshold": TOLERANCES["air_quality"]["value"] + 70,
+            "warning": "Poor air quality detected: Risk of respiratory problems.",
+            "ppe": "N95 mask, avoid strenuous activity, limit outdoor exposure.",
+            "units": "AQI",
+        },
+    },
     "radiation_level": {
-        "elevated": {"threshold": TOLERANCES["radiation_level"] * 10, "warning": "Elevated radiation detected.", "ppe": "Lead shielding, limit exposure."},
-        "significant": {"threshold": 0.1, "warning": "Significant radiation detected.", "ppe": "Full body radiation suit, potassium iodide."},
-        "lethal": {"threshold": 1, "warning": "Lethal radiation detected.", "ppe": "Immediate evacuation, maximum shielding."},
+        "background": {
+            "threshold": 20,  # Average background radiation (µSv/h)
+            "warning": "Normal background radiation levels.",
+            "ppe": "No special precautions needed.",
+            "units": "µSv/h",
+        },
+        "elevated": {
+            "threshold": 100,  # Noticeable increase (µSv/h)
+            "warning": "Elevated radiation detected. Limit exposure.",
+            "ppe": "Limit exposure time, consider basic shielding if prolonged exposure.",
+            "units": "µSv/h",
+        },
+        "significant": {
+            "threshold": 1000,  # 1 mSv/h (significant exposure)
+            "warning": "Significant radiation detected. Immediate action advised.",
+            "ppe": "Use radiation shielding, potassium iodide if available, limit exposure.",
+            "units": "µSv/h",
+        },
+        "high": {
+            "threshold": 10000,  # 10 mSv/h (high level)
+            "warning": "High radiation detected. Evacuation and shielding advised.",
+            "ppe": "Full protective gear, immediate short term evacuation, potassium iodide.",
+            "units": "µSv/h",
+        },
+        "lethal": {
+            "threshold": 1000000,  # 1 Sv/h (lethal level)
+            "warning": "Lethal radiation detected. Seek immediate shelter or evacuate.",
+            "ppe": "Maximum shielding, immediate evacuation to designated shelter.",
+            "units": "µSv/h",
+        },
     },
-    "smog_level": {"high": {"threshold": 50, "warning": "High smog level detected.", "ppe": "Mask, limit outdoor exposure."}},
-    "weather_overall": {"severe": {"threshold": "severe", "warning": "Severe weather conditions.", "ppe": "Seek shelter, appropriate weather gear."}},
+    "smog_level": {
+        "high": {
+            "threshold": 50,
+            "warning": "High smog level detected: Respiratory irritation possible.",
+            "ppe": "Mask, limit outdoor exposure, avoid strenuous activity.",
+            "units": "µg/m³",
+        },
+    },
+    "weather_overall": {
+        "severe": {
+            "threshold": "severe",
+            "warning": "Severe weather conditions: Seek immediate shelter.",
+            "ppe": "Seek designated shelter, appropriate weather gear (e.g., waterproof clothing, sturdy footwear).",
+            "units": "N/A",
+        },
+    },
 }
+
+"""
+CONDITIONS:
+This dictionary defines various environmental conditions and their associated thresholds,
+warnings, and personal protective equipment (PPE) recommendations.
+
+Location Context:
+The thresholds and recommendations are generally applicable to the United States.
+Radiation levels are based on average background levels and exposure guidelines in the US.
+"""
