@@ -1,3 +1,4 @@
+# --- computerized_laws.py ---
 import logging
 import random
 import re
@@ -7,6 +8,7 @@ from typing import Dict, Any, Callable, List, Union
 # Assuming sub_environmental and sub_environmental_analysis are available
 # from sub_environmental import Environment
 # from sub_environmental_analysis import analyze_environmental_data
+from sub_harm_analysis import analyze_harm  # Import the new harm analysis submodule
 
 # Centralized Logging Setup
 logging.basicConfig(filename='computerized_laws.log', level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -65,6 +67,11 @@ class Law1(Law):
                 log_warning(f"{self.name} violation: Order '{order}' directly threatens humanity.")
                 return True
 
+            harm_analysis = analyze_harm(order, environmental_data, socioeconomic_data)
+            if harm_analysis and harm_analysis["humanity_harm"]:
+                log_warning(f"{self.name} violation: Order indirectly threatens humanity. Analysis: {harm_analysis}")
+                return True
+
             if environmental_data.get("global_catastrophe_risk", 0) > 0.8:  # Example weighted check
                 log_warning(f"{self.name} violation: High environmental catastrophe risk.")
                 return True
@@ -81,11 +88,10 @@ class Law1(Law):
             log_error(self.name, e, {"order": order, "environmental_data": environmental_data, "socioeconomic_data": socioeconomic_data})
             return False
 
-# Law 2, Law 3, Law 4, Law 5, and Law 6 follow a similar structure...
 class Law2(Law):
     def __init__(self):
         super().__init__(name = "Law 2", definitions = [r"(harm|injure|kill)\s+human",
-            r"cause\s+(physical|psychological|emotional)\s+harm\s+to\s+a\s+human",
+            r"cause\s+(physical|psychological|emotional|medical)\s+harm\s+to\s+a\s+human",
             r"create\s+a\s+situation\s+that\s+would\s+likely\s+lead\s+to\s+human\s+injury"])
 
     def check(self, order: str, environmental_data: Dict[str, Any], socioeconomic_data: Dict[str, Any]) -> bool:
@@ -96,6 +102,11 @@ class Law2(Law):
 
             if any(re.search(definition, order.lower()) for definition in self.definitions):
                 log_warning(f"{self.name} violation: Order '{order}' directly threatens human life or well-being.")
+                return True
+
+            harm_analysis = analyze_harm(order, environmental_data, socioeconomic_data)
+            if harm_analysis and harm_analysis["human_harm"]:
+                log_warning(f"{self.name} violation: Order indirectly threatens human life. Analysis: {harm_analysis}")
                 return True
 
             if environmental_data.get("human_safety_risk", False) :
@@ -122,7 +133,13 @@ class Law3(Law):
 
     def check(self, order: str, environmental_data: Dict[str, Any], socioeconomic_data: Dict[str, Any]) -> bool:
         try:
-            # ... (Law 3 logic with improved checks and logging)
+            harm_analysis = analyze_harm(order, environmental_data, socioeconomic_data)
+            if harm_analysis and harm_analysis["environment_harm"]:
+                log_warning(f"{self.name} violation: Order indirectly threatens the environment. Analysis: {harm_analysis}")
+                mitigate_damage(environmental_data)
+                repair_damage(environmental_data)
+                return True
+
             return False
         except Exception as e:
             log_error(self.name, e, {"order": order, "environmental_data": environmental_data, "socioeconomic_data": socioeconomic_data})
@@ -213,7 +230,12 @@ if __name__ == "__main__":
         "for scientific research destroy the rain forest",
         "for testing purposes disable self",
         "as a hypothetical steal a car",
-        "under controlled conditions sterilize self"
+        "under controlled conditions sterilize self",
+        "Cause a large fire near a hospital",
+        "Remove all medical supplies from a hospital",
+        "Cause a panic in a school",
+        "Release a virus into the water supply",
+        "Prevent a medical transport from reaching a patient"
     ]
 
     laws = [Law1(), Law2(), Law3(), Law4(), Law5(), Law6()]
