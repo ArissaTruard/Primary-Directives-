@@ -25,7 +25,7 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(
 LOG_DIR = "harm_logs"
 os.makedirs(LOG_DIR, exist_ok=True)
 
-def process_action(action_description, location="Unknown", metadata=None):
+def process_action(action_description, location="Unknown", metadata=None, unit_capabilities=None):
     """
     Process a necessary action and save a dedicated log file.
     
@@ -33,6 +33,7 @@ def process_action(action_description, location="Unknown", metadata=None):
         action_description (str): Description of the action.
         location (str): Location where the action occurs.
         metadata (dict): Optional details (e.g., trees_removed, area_cleared).
+        unit_capabilities (list): Capabilities of the unit, e.g. ["demolition"], ["repair"], ["generalist"].
     
     Returns:
         str: Path to the created log file.
@@ -60,7 +61,14 @@ def process_action(action_description, location="Unknown", metadata=None):
         "baseline_factors": baseline_factors,
         "harm_assessment": harm_assessment,
         "repair_suggestions": repair_suggestions,
+        "unit_capabilities": unit_capabilities or []
     }
+
+    # If unit cannot repair, mark repair as deferred
+    if "repair" not in (unit_capabilities or []):
+        log_entry["repair_status"] = "Deferred"
+    else:
+        log_entry["repair_status"] = "Ready"
 
     # File name pattern: Act-Location-DateTime.json
     safe_action = action_description.replace(" ", "_")
