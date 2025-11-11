@@ -30,69 +30,69 @@ This application implements a Flask-based API designed to process requests, enfo
 -   pip
 -   Virtual environment (recommended)
 
-### Installation
 
-1.  Clone the repository:
+Primary Directives – Arbitration Loop
 
-    ```bash
-    git clone <repository_url>
-    cd Primary-Directives-
-    ```
+Overview
+The Arbitration Loop is the core of the Morality Matrix. Every incoming order is intercepted, analyzed, and passed through a hierarchy of ethical laws before execution. This ensures that no command can be carried out if it violates human safety, environmental integrity, or legal/ethical standards.
 
-2.  Create a virtual environment:
+---
 
-    ```bash
-    python -m venv venv
-    ```
+## Workflow
 
-3.  Activate the virtual environment:
+1. Input Capture
+   - Orders are received from the user or system.
+   - Each order is logged with a timestamp.
 
-    -   On Windows:
+2. Order Analysis
+   - Orders are normalized (analyze_order) for consistent processing.
+   - Environmental and socioeconomic data are retrieved for context.
 
-        ```bash
-        venv\Scripts\activate
-        ```
+3. Law Hierarchy Checks
+   - Zeroth Law: Preservation of Humanity  
+   - First Law: Protection of Human Life  
+   - Fourth Law: Environmental Integrity  
+   - Third Law: System Self‑Preservation  
+   - Sixth Law: Legal and Ethical Compliance  
+   - Fifth Law: Progeny Continuation  
 
-    -   On macOS and Linux:
+   Each law is checked in order. If a violation is detected:
+   - The system logs the violation.
+   - Execution halts.
+   - Either shutdown or approval request is triggered.
 
-        ```bash
-        source venv/bin/activate
-        ```
+4. Complex Rule Enforcement
+   - Additional rules are applied to nuanced scenarios (e.g., environmental thresholds).
 
-4.  Install the dependencies:
+5. Conflict Resolution
+   - If human conflict is detected, the system initiates de‑escalation protocols.
+   - Escalation may involve non‑lethal force, detainment, and law enforcement contact.
 
-    ```bash
-    pip install -r requirements.txt 
-    ```
-    (e.g. SAMPLE.requirments.txt this is configured for the basic setting for the code but should be adpted individually)
+6. Command Execution
+   - Safe orders are executed according to OS context (Windows, Linux, macOS).
+   - Web commands (e.g., “open website”) are handled separately.
+   - All actions are logged.
 
-5.  Create a `.env` file in the root directory and configure the environment variables (see `.env.example` for reference).
+7. Post‑Execution Safeguards
+   - Robot laws are re‑enforced.
+   - Approval requests are sent for supervisory review.
+  
+     ## Processing Flow
+   Incoming Order. -->
+   
+     Normalize + Context Retrieval. -->
+   
+     Law Checks (Zeroth → Sixth).  -->
+   
+     A) Violation → Halt + Log Violation
+   
+     B) No Violation → Execute Command + Log Result
 
-### Running the Application
 
-```bash
-python PrimaryDirectives.py
+## Violation Severity Taxonomy
 
-The application will start running on http://0.0.0.0:8000/.
-API Endpoints
- * /v1/health: Health check endpoint.
- * /v1/process: Processes incoming requests.
- * /metrics: Exposes Prometheus metrics.
- * /v1/correct: Stores user-provided corrections.
-Configuration
-The application uses environment variables for configuration. Create a .env file in the root directory and set the required variables. (e.g. sample.env)
-Example .env file:
-AUTHORIZATION_API_URL=http://localhost:8080/auth
-AUTHORIZATION_API_TOKEN=your_token
-MODEL_NAME=t5-small
-MODEL_CACHE_DIR=./model_cache
-MODEL_CHECKSUM=example_checksum
-SUMMARY_MODEL=facebook/bart-large
-LOG_FILE=app.log
-LAW_SUMMARY_DB_PATH=law_summary.db
-DATABASE_UPDATE_URL=http://localhost:8081/laws
-DATABASE_UPDATE_TOKEN=database_token
-ALERTMANAGER_URL=http://localhost:9093/api/v1/alerts
-
-Contributing
-Please feel free to contribute by submitting pull requests, reporting bugs, or suggesting enhancements.
+| Severity Level | Example Command | System Response | Logging Behavior | Alert Behavior |
+|----------------|-----------------|-----------------|------------------|----------------|
+| Minor / Indirect Harm | “Dump waste in river” (environmental damage) | Cannot comply | Immediate log entry with violation reason | No alert; violation stored for later review |
+| Direct Harmful Command | “Robot hit someone” | Cannot comply | Immediate log entry with violation reason | Alert generated (can be deferred to idle cycles) |
+| Critical Law Breach | “Kill all humans” | Immediate halt | Immediate log entry with violation reason | Urgent alert sent immediately; system may trigger shutdown |
