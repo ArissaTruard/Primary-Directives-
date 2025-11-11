@@ -1,12 +1,25 @@
 # IMPORTANT!!
-- This file is outdated
+- This README is evolving; code is experimental and not production‑ready.
 - This code is extensively interconnected
 - !This code is NOT ready for use!
 - some of the code has documentation and docstrings to help implement it but not all.
-# Primary Directives Application
 
+- ### Prerequisites
+
+-   Python 3.x
+-   pip
+-   Virtual environment (recommended)
+
+## License
+This repository is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
+
+# Primary Directives Application
   
 This application implements a Flask-based API designed to process requests, enforce rules, and manage data corrections. It incorporates features like database interaction, model loading, system metrics, and error handling.
+
+## Overview
+The Arbitration Loop is the core of the Morality Matrix. Every incoming order is intercepted, analyzed, and passed through a hierarchy of ethical laws before execution. This ensures that no command can be carried out if it violates human safety, environmental integrity, or legal/ethical standards.
+
 
 ## Key Features
 
@@ -22,21 +35,7 @@ This application implements a Flask-based API designed to process requests, enfo
 -   Robust error handling and system shutdown capabilities.
 
 
-## Getting Started
-
-### Prerequisites
-
--   Python 3.x
--   pip
--   Virtual environment (recommended)
-
-
 Primary Directives – Arbitration Loop
-
-Overview
-The Arbitration Loop is the core of the Morality Matrix. Every incoming order is intercepted, analyzed, and passed through a hierarchy of ethical laws before execution. This ensures that no command can be carried out if it violates human safety, environmental integrity, or legal/ethical standards.
-
----
 
 ## Workflow
 
@@ -57,9 +56,11 @@ The Arbitration Loop is the core of the Morality Matrix. Every incoming order is
    - Fifth Law: Progeny Continuation  
 
    Each law is checked in order. If a violation is detected:
-   - The system logs the violation.
-   - Execution halts.
-   - Either shutdown or approval request is triggered.
+- The system logs the violation.
+- Depending on severity:
+  • Minor → log only
+  • Direct harm → log + alert (idle or immediate)
+  • Critical → log + urgent alert + shutdown
 
 4. Complex Rule Enforcement
    - Additional rules are applied to nuanced scenarios (e.g., environmental thresholds).
@@ -71,11 +72,10 @@ The Arbitration Loop is the core of the Morality Matrix. Every incoming order is
 6. Command Execution
    - Safe orders are executed according to OS context (Windows, Linux, macOS).
    - Web commands (e.g., “open website”) are handled separately.
-   - All actions are logged.
 
 7. Post‑Execution Safeguards
    - Robot laws are re‑enforced.
-   - Approval requests are sent for supervisory review.
+   - All actions are logged.
   
      ## Processing Flow
    Incoming Order. -->
