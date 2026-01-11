@@ -1,378 +1,408 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8"><title>Semantic Editor</title>
+    <meta charset="UTF-8"><title>Neural Code Editor</title>
     <style>
-        /* --- THEME --- */
-        body { margin: 0; background: #0d1117; color: #c9d1d9; font-family: 'Consolas', 'Monaco', monospace; height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
-        
-        /* --- TOOLBAR --- */
-        #toolbar { height: 32px; background: #161b22; border-bottom: 1px solid #30363d; display: flex; align-items: center; padding: 0 10px; gap: 10px; }
-        button { background: #21262d; border: 1px solid #30363d; color: #c9d1d9; padding: 4px 10px; border-radius: 4px; cursor: pointer; font-size: 12px; }
-        button:hover { background: #30363d; color: white; }
-        button.primary { background: #238636; border-color: #238636; color: white; }
+        :root { --bg: #0d1117; --panel: #161b22; --border: #30363d; --text: #c9d1d9; --accent: #58a6ff; }
+        body { margin: 0; background: var(--bg); color: var(--text); font-family: 'Consolas', monospace; height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
 
-        /* --- SPLIT VIEW --- */
-        #workspace { flex: 1; display: flex; overflow: hidden; }
-        
-        /* RAW EDITOR (Left) */
-        #raw-layer { width: 0; flex: 0; transition: 0.2s; border-right: 1px solid #30363d; display: flex; flex-direction: column; }
-        textarea { flex: 1; background: #0d1117; color: #c9d1d9; border: none; padding: 10px; resize: none; outline: none; white-space: pre; overflow: auto; font-family: inherit; font-size: 13px; line-height: 1.5; }
+        /* TOOLBAR */
+        #toolbar { height: 36px; background: var(--panel); border-bottom: 1px solid var(--border); display: flex; align-items: center; padding: 0 10px; gap: 10px; user-select: none; }
+        .btn { background: #21262d; border: 1px solid #30363d; color: var(--text); padding: 4px 12px; border-radius: 4px; cursor: pointer; font-size: 12px; transition: 0.2s; }
+        .btn:hover { background: #30363d; color: white; }
+        .btn.primary { background: #238636; border-color: #238636; color: white; }
 
-        /* BLOCK EDITOR (Right) */
-        #block-layer { flex: 1; padding: 20px; overflow-y: auto; position: relative; }
+        /* WORKSPACE */
+        #workspace { flex: 1; display: flex; overflow: hidden; position: relative; }
         
-        /* --- SEMANTIC BLOCKS --- */
-        .block { 
-            position: relative; margin-left: 20px; padding: 5px; 
+        /* RAW VIEW (Hidden by default) */
+        #raw-view { width: 0; border-right: 1px solid var(--border); transition: 0.3s; display: flex; flex-direction: column; }
+        textarea { flex: 1; background: #0d1117; color: #c9d1d9; border: none; padding: 15px; resize: none; outline: none; white-space: pre; font-family: inherit; font-size: 13px; line-height: 1.5; }
+
+        /* BLOCK VIEW */
+        #block-view { flex: 1; padding: 20px; overflow-y: auto; position: relative; }
+        
+        /* BLOCKS */
+        .block {
+            position: relative; margin: 4px 0 4px 20px; padding: 2px;
             border-left: 2px solid #30363d; border-radius: 4px;
-            transition: all 0.2s; background: rgba(255,255,255,0.02);
-            margin-bottom: 4px;
+            background: rgba(255,255,255,0.01); transition: all 0.2s;
         }
+        .block:hover { border-left-color: #8b949e; background: rgba(255,255,255,0.03); }
+        .block.selected { border-left-color: var(--accent); background: rgba(88, 166, 255, 0.1) !important; }
         
-        /* Dragging Styles */
-        .block.draggable { cursor: grab; }
-        .block.dragging { opacity: 0.5; border: 2px dashed #58a6ff; background: #1f2428; }
-        .block.drag-over { border-top: 2px solid #58a6ff; }
-
-        /* Semantic Colors (From your Python snippet) */
-        .type-class    { border-color: #d2a8ff; background: rgba(210, 168, 255, 0.05); } /* Purple */
-        .type-function { border-color: #58a6ff; background: rgba(88, 166, 255, 0.05); } /* Blue */
-        .type-subblock { border-color: #7ee787; background: rgba(126, 231, 135, 0.05); } /* Green */
-        .type-comment  { border-color: #484f58; color: #8b949e; font-style: italic; }
-        .type-import   { border-color: #8b949e; opacity: 0.8; }
+        /* Semantic Colors */
+        .b-class { border-color: #d2a8ff; background: rgba(210, 168, 255, 0.05); }
+        .b-def   { border-color: #58a6ff; background: rgba(88, 166, 255, 0.05); }
+        .b-if    { border-color: #7ee787; }
+        .b-comment { border-color: #484f58; font-style: italic; color: #8b949e; }
+        .b-import { border-color: #8b949e; opacity: 0.8; }
         
-        /* Header Row */
-        .block-head { display: flex; align-items: center; gap: 8px; padding: 2px 5px; border-radius: 4px; }
-        .block-head:hover { background: rgba(255,255,255,0.05); }
+        /* Dragging */
+        .block.dragging { opacity: 0.4; border: 2px dashed var(--accent); }
+        .block.drag-over { border-top: 2px solid var(--accent); box-shadow: 0 -2px 5px rgba(88,166,255,0.2); }
         
-        .toggle-btn { cursor: pointer; width: 12px; height: 12px; display: flex; align-items: center; justify-content: center; font-size: 10px; color: #8b949e; }
-        .block-name { font-weight: bold; color: inherit; flex: 1; }
-        .block-type { font-size: 10px; opacity: 0.5; text-transform: uppercase; }
-
-        /* Collapsed State */
-        .block.collapsed .block-body { display: none; }
-        .block.collapsed::after { content: '...'; opacity: 0.5; margin-left: 10px; }
-
+        /* Headers */
+        .b-head { display: flex; align-items: center; padding: 4px; cursor: grab; border-radius: 3px; }
+        .b-head:hover { background: rgba(255,255,255,0.05); }
+        .b-toggle { width: 14px; text-align: center; font-size: 10px; cursor: pointer; color: #8b949e; margin-right: 5px; }
+        .b-title { font-weight: bold; flex: 1; outline: none; }
+        .b-type { font-size: 9px; text-transform: uppercase; opacity: 0.5; margin-left: 8px; pointer-events: none; }
+        
+        /* Content Body */
+        .b-body { padding-left: 4px; }
+        .b-body.collapsed { display: none; }
+        
         /* Editable Lines */
-        .code-line { padding: 0 5px; border-radius: 2px; cursor: text; min-height: 18px; }
-        .code-line:hover { background: rgba(255,255,255,0.05); }
-        .code-line:focus { background: #161b22; outline: none; color: white; }
+        .code-line { padding: 2px 5px; outline: none; border-radius: 2px; min-height: 18px; white-space: pre; cursor: text; }
+        .code-line:focus { background: #161b22; color: white; }
+
+        /* CONTEXT MENU */
+        #ctx { display: none; position: absolute; background: var(--panel); border: 1px solid var(--border); box-shadow: 0 5px 15px rgba(0,0,0,0.5); border-radius: 6px; z-index: 1000; min-width: 150px; }
+        .ctx-item { padding: 8px 12px; font-size: 13px; cursor: pointer; display: flex; justify-content: space-between; color: #ccc; }
+        .ctx-item:hover { background: var(--accent); color: white; }
+        .ctx-sep { height: 1px; background: var(--border); margin: 4px 0; }
     </style>
 </head>
 <body>
 
     <div id="toolbar">
-        <span style="font-weight:bold; color:#58a6ff;">📦 Semantic Editor</span>
+        <span>🧠 Neural Editor</span>
         <div style="flex:1"></div>
-        <button onclick="Editor.toggleRaw()" title="Toggle Raw Text View">📝 Split View</button>
-        <button onclick="Editor.save()" class="primary">💾 Save</button>
+        <button class="btn" onclick="UI.toggleRaw()">👁️ Raw View</button>
+        <button class="btn primary" onclick="IO.save()">💾 Save</button>
     </div>
 
     <div id="workspace">
-        <div id="raw-layer">
-            <textarea id="raw-input" spellcheck="false" oninput="Editor.parseFromRaw()"></textarea>
-        </div>
-        <div id="block-layer"></div>
+        <div id="raw-view"><textarea id="raw-in" oninput="Parser.ingest()"></textarea></div>
+        <div id="block-view" oncontextmenu="UI.showCtx(event)"></div>
+        <div id="ctx"></div>
     </div>
 
     <script>
-        // --- 1. THE BLOCK TREE LOGIC (Ported from your Python) ---
-        
-        const COLOR = {
-            "class": "type-class",
-            "function": "type-function",
-            "subblock": "type-subblock",
-            "import": "type-import",
-            "comment": "type-comment",
-            "code": "type-code"
-        };
-
+        // ==========================================
+        //  1. DATA STRUCTURE (The AST)
+        // ==========================================
         class Block {
-            constructor(type, name, indent, lineStr) {
-                this.type = type;
-                this.name = name;
-                this.indent = indent;
-                this.lines = lineStr ? [lineStr] : [];
-                this.children = [];
+            constructor(type, line, indent) {
+                this.id = Math.random().toString(36).substr(2, 9);
+                this.type = type;       // class, def, code, comment
+                this.indent = indent;   // 0, 4, 8...
+                this.header = line;     // "class Foo:"
+                this.lines = [];        // Raw code lines inside this block (if it's a leaf)
+                this.children = [];     // Nested blocks
                 this.collapsed = false;
-                this.id = Math.random().toString(36).substr(2, 9); // Unique ID for DragDrop
             }
         }
 
+        // ==========================================
+        //  2. PARSER (Text -> Blocks)
+        // ==========================================
         const Parser = {
-            parse(text) {
+            root: new Block('root', '', -4),
+
+            ingest() {
+                const text = document.getElementById('raw-in').value;
                 const lines = text.split('\n');
-                const root = new Block("root", "ROOT", -4, "");
-                const stack = [root];
+                this.root = new Block('root', 'ROOT', -4);
+                const stack = [this.root];
 
                 lines.forEach(line => {
-                    if(!line.trim()) {
-                         // Attach empty lines to current leaf
-                         stack[stack.length-1].lines.push(line);
-                         return;
-                    }
+                    if(!line.trim()) return; // Skip empty for now (or attach to prev)
 
                     const indent = line.search(/\S|$/);
-                    const stripped = line.trim();
-                    
-                    // Logic: Find parent with strictly LESS indent
+                    const raw = line.trim();
+
+                    // 1. Find Parent (Pop stack until indent > parent)
                     while(stack.length > 1 && stack[stack.length-1].indent >= indent) {
                         stack.pop();
                     }
                     const parent = stack[stack.length-1];
 
-                    // Identify Block Type
-                    let type = "code";
-                    let name = "";
-                    
-                    if(stripped.startsWith("class ")) { type = "class"; name = stripped.split(' ')[1].replace(':',''); }
-                    else if(stripped.startsWith("def ")) { type = "function"; name = stripped.split(' ')[1].split('(')[0]; }
-                    else if(stripped.startsWith("#")) { type = "comment"; name = stripped; }
-                    else if(stripped.startsWith("import ") || stripped.startsWith("from ")) { type = "import"; name = "import"; }
-                    else if(stripped.endsWith(":")) { type = "subblock"; name = stripped.replace(':',''); }
-                    
-                    // Decide: Is this a new structural block or just a line of code?
-                    // Structure blocks are classes, functions, or anything that increases indent level
-                    if (["class", "function", "subblock"].includes(type)) {
-                        const newBlock = new Block(type, name, indent, line);
-                        parent.children.push(newBlock);
-                        stack.push(newBlock);
+                    // 2. Identify Type
+                    let type = 'code';
+                    if(raw.startsWith('class ')) type = 'class';
+                    else if(raw.startsWith('def ')) type = 'def';
+                    else if(raw.startsWith('if ') || raw.startsWith('for ') || raw.startsWith('while ')) type = 'if';
+                    else if(raw.startsWith('#')) type = 'comment';
+                    else if(raw.startsWith('import ') || raw.startsWith('from ')) type = 'import';
+
+                    // 3. Create Structure
+                    // Structural blocks (class/def/if) become containers
+                    if (['class', 'def', 'if'].includes(type)) {
+                        const b = new Block(type, line, indent);
+                        parent.children.push(b);
+                        stack.push(b);
                     } else {
-                        // Just append line to current block
-                        // OR if indent matches parent indent, maybe it belongs to parent?
-                        // For simplicity in this v1, code lines live in the block they are inside
-                        // We check if we need to create a "code chunk" or append to last child
+                        // Leaf nodes (code, comments, imports)
+                        // If previous sibling is 'code' and same indent, merge? 
+                        // For editing granularity, let's keep chunks separate or merge same types.
                         const last = parent.children[parent.children.length-1];
-                        if(last && last.type === 'code' && last.indent === indent) {
+                        if (last && last.type === 'code' && last.indent === indent && type === 'code') {
                             last.lines.push(line);
                         } else {
-                            // New generic code block
-                            const codeBlock = new Block("code", "...", indent, line);
-                            parent.children.push(codeBlock);
+                            const b = new Block(type, line, indent);
+                            b.lines.push(line);
+                            parent.children.push(b);
                         }
                     }
                 });
-
-                return root;
+                
+                UI.render();
             },
 
-            renderToText(block) {
+            // --- THE RENDERER (Blocks -> Py) ---
+            toPy(block = this.root) {
                 let out = "";
-                block.children.forEach(child => {
-                    child.lines.forEach(l => out += l + "\n");
-                    out += this.renderToText(child);
-                });
+                if (block.type !== 'root' && block.type !== 'code' && block.type !== 'comment' && block.type !== 'import') {
+                    out += block.header + "\n";
+                }
+                
+                // Leaf Lines
+                block.lines.forEach(l => out += l + "\n");
+                
+                // Children
+                block.children.forEach(c => out += this.toPy(c));
+                
                 return out;
             }
         };
 
-        // --- 2. THE UI RENDERER ---
-
-        const Editor = {
-            root: null,
+        // ==========================================
+        //  3. UI & DRAG ENGINE
+        // ==========================================
+        const UI = {
             dragSrc: null,
+            ctxTarget: null,
 
-            init() {
-                // Initial Demo Code
-                const demo = [
-                    "import sys",
-                    "# This is a semantic editor",
-                    "",
-                    "class Hero:",
-                    "    def __init__(self, name):",
-                    "        self.name = name",
-                    "        self.power = 100",
-                    "",
-                    "    def fly(self):",
-                    "        print(self.name + ' is flying')",
-                    "        if self.power > 0:",
-                    "            self.power -= 10"
-                ].join('\n');
-                
-                document.getElementById('raw-input').value = demo;
-                this.parseFromRaw();
+            render() {
+                const v = document.getElementById('block-view');
+                v.innerHTML = '';
+                Parser.root.children.forEach(c => v.appendChild(this.buildEl(c)));
             },
 
-            toggleRaw() {
-                const el = document.getElementById('raw-layer');
-                el.style.width = el.style.width === '50%' ? '0' : '50%';
-                el.style.flex = el.style.flex === '1' ? '0' : '1';
-            },
-
-            parseFromRaw() {
-                const text = document.getElementById('raw-input').value;
-                this.root = Parser.parse(text);
-                this.renderTree();
-            },
-
-            renderTree() {
-                const container = document.getElementById('block-layer');
-                container.innerHTML = '';
-                // Skip root, render children
-                this.root.children.forEach(child => {
-                    container.appendChild(this.createBlockElement(child));
-                });
-            },
-
-            createBlockElement(block) {
+            buildEl(block) {
                 const el = document.createElement('div');
-                el.className = `block ${COLOR[block.type] || ''}`;
-                if(block.collapsed) el.classList.add('collapsed');
+                el.className = `block b-${block.type}`;
                 el.draggable = true;
+                el.dataset.id = block.id;
 
-                // Drag Events
+                // --- DRAG EVENTS ---
                 el.addEventListener('dragstart', e => { 
                     this.dragSrc = block; 
-                    e.dataTransfer.effectAllowed = 'move';
-                    el.classList.add('dragging');
-                    e.stopPropagation(); // Don't drag parent
+                    e.stopPropagation(); 
+                    el.classList.add('dragging'); 
                 });
                 el.addEventListener('dragend', () => el.classList.remove('dragging'));
-                el.addEventListener('dragover', e => { e.preventDefault(); el.classList.add('drag-over'); return false; });
-                el.addEventListener('dragleave', () => el.classList.remove('drag-over'));
-                el.addEventListener('drop', e => {
-                    e.stopPropagation();
+                
+                el.addEventListener('dragover', e => { 
+                    e.preventDefault(); e.stopPropagation();
+                    el.classList.add('drag-over'); 
+                });
+                el.addEventListener('dragleave', e => { 
+                    e.stopPropagation(); 
+                    el.classList.remove('drag-over'); 
+                });
+                el.addEventListener('drop', e => { 
+                    e.stopPropagation(); 
                     el.classList.remove('drag-over');
-                    this.handleDrop(block);
+                    this.handleDrop(block); 
                 });
 
-                // Header
-                const head = document.createElement('div');
-                head.className = 'block-head';
-                
-                // Toggle
-                const tog = document.createElement('span');
-                tog.className = 'toggle-btn';
-                tog.innerHTML = block.collapsed ? '▶' : '▼';
-                if(block.children.length === 0) tog.innerHTML = '•';
-                tog.onclick = () => { block.collapsed = !block.collapsed; this.renderTree(); };
-
-                // Name/Code
-                const title = document.createElement('span');
-                title.className = 'block-name';
-                title.innerText = block.name || block.lines[0].trim();
-                
-                // If it's just code, make it editable text
-                if(block.type === 'code' || block.type === 'import') {
-                    title.contentEditable = true;
-                    title.className = 'code-line';
-                    title.innerText = block.lines.join('\n');
-                    title.oninput = (e) => { block.lines = e.target.innerText.split('\n'); this.syncToRaw(); };
-                    // Disable header styling for raw code
-                    el.style.borderLeft = 'none';
-                    el.style.padding = '0';
-                    head.style.display = 'none'; // Hide header for pure code
-                    el.appendChild(title);
-                } else {
-                    head.appendChild(tog);
-                    head.appendChild(title);
-                    
-                    const meta = document.createElement('span');
-                    meta.className = 'block-type';
-                    meta.innerText = block.type;
-                    head.appendChild(meta);
+                // --- HEADER ---
+                if (!['code', 'import', 'comment'].includes(block.type)) {
+                    const head = document.createElement('div');
+                    head.className = 'b-head';
+                    head.innerHTML = `
+                        <span class="b-toggle">${block.collapsed?'▶':'▼'}</span>
+                        <span class="b-title" contenteditable="true">${block.header.trim()}</span>
+                        <span class="b-type">${block.type}</span>
+                    `;
+                    head.querySelector('.b-toggle').onclick = () => { block.collapsed = !block.collapsed; UI.render(); };
+                    head.querySelector('.b-title').oninput = (e) => { 
+                        // Update indentation in header string
+                        const oldIndentSpace = " ".repeat(block.indent);
+                        block.header = oldIndentSpace + e.target.innerText;
+                        this.sync(); 
+                    };
                     el.appendChild(head);
                 }
 
-                // Children Container
+                // --- BODY ---
                 const body = document.createElement('div');
-                body.className = 'block-body';
+                body.className = 'b-body' + (block.collapsed ? ' collapsed' : '');
                 
-                // If a structural block has lines of its own definition (like 'def foo():')
-                // We rendered that in the header.
-                // Now render children
-                block.children.forEach(child => {
-                    body.appendChild(this.createBlockElement(child));
+                // 1. Render Lines (Editable)
+                block.lines.forEach((line, idx) => {
+                    const l = document.createElement('div');
+                    l.className = 'code-line';
+                    l.contentEditable = true;
+                    l.innerText = line.trim(); 
+                    if(block.type==='code') l.style.color = '#c9d1d9';
+                    if(block.type==='comment') l.style.color = '#8b949e';
+                    
+                    l.oninput = (e) => {
+                        const space = " ".repeat(block.indent);
+                        block.lines[idx] = space + e.target.innerText;
+                        this.sync();
+                    };
+                    body.appendChild(l);
                 });
-                el.appendChild(body);
 
+                // 2. Render Children
+                block.children.forEach(child => body.appendChild(this.buildEl(child)));
+                
+                el.appendChild(body);
                 return el;
             },
 
+            // --- INTELLIGENT DROP & RE-INDENT ---
             handleDrop(targetBlock) {
-                if(this.dragSrc === targetBlock) return;
+                if (this.dragSrc === targetBlock) return;
                 
-                // Simple Logic: Move Src to be a child of Target
                 // 1. Remove from old parent
-                this.removeFromTree(this.root, this.dragSrc);
-                
-                // 2. Add to new target
-                targetBlock.children.push(this.dragSrc);
-                
-                // 3. Re-indent logic would go here (update indentation of src based on target)
-                this.recalcIndent(this.dragSrc, targetBlock.indent + 4);
+                this.removeFromTree(Parser.root, this.dragSrc);
 
-                this.syncToRaw();
-                this.renderTree();
+                // 2. Add to new Target
+                targetBlock.children.push(this.dragSrc);
+
+                // 3. AUTO-INDENT LOGIC (The Magic)
+                // Target's children should be indented +4 from Target
+                const targetIndent = targetBlock.indent < 0 ? 0 : targetBlock.indent; // Root is -4
+                const newBaseIndent = targetIndent + 4;
+                
+                this.recalcIndentRecursive(this.dragSrc, newBaseIndent);
+
+                this.sync();
+                this.render();
             },
 
             removeFromTree(parent, target) {
                 const idx = parent.children.indexOf(target);
-                if(idx > -1) {
-                    parent.children.splice(idx, 1);
-                    return true;
-                }
-                for(let c of parent.children) {
-                    if(this.removeFromTree(c, target)) return true;
-                }
+                if(idx > -1) { parent.children.splice(idx, 1); return true; }
+                for(let c of parent.children) if(this.removeFromTree(c, target)) return true;
                 return false;
             },
 
-            recalcIndent(block, newIndent) {
-                // Calculate delta
-                const oldIndent = block.lines[0].search(/\S|$/);
-                const delta = newIndent - oldIndent;
-
-                // Apply to self
-                block.lines = block.lines.map(l => {
-                    const content = l.trimStart();
-                    return " ".repeat(newIndent) + content;
-                });
+            recalcIndentRecursive(block, newIndent) {
+                // Update header
+                if (block.header) {
+                    block.header = " ".repeat(newIndent) + block.header.trimStart();
+                }
+                
+                // Update lines
+                block.lines = block.lines.map(l => " ".repeat(newIndent) + l.trimStart());
+                
+                // Set self
                 block.indent = newIndent;
 
-                // Apply to children recursively
-                block.children.forEach(c => this.recalcIndent(c, newIndent + 4));
+                // Process children (indent + 4)
+                block.children.forEach(c => this.recalcIndentRecursive(c, newIndent + 4));
             },
 
-            syncToRaw() {
-                const text = Parser.renderToText(this.root);
-                document.getElementById('raw-input').value = text;
+            sync() {
+                const txt = Parser.toPy();
+                document.getElementById('raw-in').value = txt;
             },
 
-            async save() {
-                const content = document.getElementById('raw-input').value;
-                const urlParams = new URLSearchParams(window.location.search);
-                const path = urlParams.get('file'); // ?file=tools/test.py
+            toggleRaw() {
+                const v = document.getElementById('raw-view');
+                v.style.width = v.style.width === '50%' ? '0' : '50%';
+            },
+
+            // --- CONTEXT MENU ---
+            showCtx(e) {
+                e.preventDefault();
+                const m = document.getElementById('ctx');
+                m.style.display = 'block';
+                m.style.left = e.clientX + 'px';
+                m.style.top = e.clientY + 'px';
                 
+                // Find block under cursor to insert into
+                const el = e.target.closest('.block');
+                this.ctxTarget = el ? this.findBlockById(el.dataset.id, Parser.root) : Parser.root;
+
+                // Auto-hide
+                document.addEventListener('click', () => m.style.display='none', {once:true});
+            },
+
+            findBlockById(id, parent) {
+                if(parent.id === id) return parent;
+                for(let c of parent.children) {
+                    const found = this.findBlockById(id, c);
+                    if(found) return found;
+                }
+                return null;
+            },
+            
+            addBlock(type) {
+                const parent = this.ctxTarget || Parser.root;
+                const indent = parent.indent < 0 ? 0 : parent.indent + 4;
+                const sp = " ".repeat(indent);
+                
+                let text = "";
+                if(type === 'class') text = sp + "class NewClass:";
+                if(type === 'def') text = sp + "def new_func():";
+                if(type === 'comment') text = sp + "# New Comment";
+
+                const b = new Block(type, text, indent);
+                if(type === 'comment') b.lines.push(text);
+                
+                parent.children.push(b);
+                this.sync();
+                this.render();
+            }
+        };
+
+        const IO = {
+            async load() {
+                const params = new URLSearchParams(window.location.search);
+                const path = params.get('file');
+                if(!path) {
+                    document.getElementById('raw-in').value = "# New Python File\n\nclass App:\n    def __init__(self):\n        pass";
+                    Parser.ingest();
+                    return;
+                }
+                
+                const res = await fetch('/io/read', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({path})
+                });
+                const d = await res.json();
+                if(d.status === 'success') {
+                    document.getElementById('raw-in').value = d.content;
+                    Parser.ingest();
+                }
+            },
+            async save() {
+                const content = document.getElementById('raw-in').value;
+                const params = new URLSearchParams(window.location.search);
+                const path = params.get('file');
                 if(path) {
                     await fetch('/io/save', {
                         method: 'POST',
                         headers: {'Content-Type': 'application/json'},
                         body: JSON.stringify({path, content})
                     });
-                    alert('Saved!');
+                    // Show Toast via Parent Shell if available
+                    window.parent.postMessage({type:'SHOW_TOAST', message:'File Saved', level:'success'}, '*');
                 } else {
-                    alert('No file path specified. (Open with ?file=...)');
+                    alert("No file path defined. (Open with ?file=...)");
                 }
             }
         };
 
-        // Boot
-        // Check if file provided in URL
-        const p = new URLSearchParams(window.location.search);
-        const f = p.get('file');
-        if(f) {
-            fetch('/io/read', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({path:f})})
-            .then(r=>r.json()).then(d => {
-                if(d.status === 'success') {
-                    document.getElementById('raw-input').value = d.content;
-                    Editor.parseFromRaw();
-                }
-            });
-        } else {
-            Editor.init();
-        }
+        // Context Menu Builder
+        const ctx = document.getElementById('ctx');
+        ctx.innerHTML = `
+            <div class="ctx-item" onclick="UI.addBlock('class')"><span>📦 Class</span><span>C</span></div>
+            <div class="ctx-item" onclick="UI.addBlock('def')"><span>⚡ Function</span><span>F</span></div>
+            <div class="ctx-item" onclick="UI.addBlock('comment')"><span>💬 Comment</span><span>#</span></div>
+        `;
+
+        // Start
+        IO.load();
 
     </script>
 </body>
