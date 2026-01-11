@@ -1,288 +1,379 @@
-import sys
-import os
-import json
-import uuid
-import argparse
-import collections
-from datetime import datetime
-
-# AUTO-DEPENDENCY
-try:
-    import ebooklib
-    from ebooklib import epub
-    from bs4 import BeautifulSoup
-except ImportError:
-    import subprocess
-    subprocess.check_call([sys.executable, "-m", "pip", "install", "ebooklib", "beautifulsoup4"])
-    import ebooklib
-    from ebooklib import epub
-
-# CONFIG
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-REPORT_DIR = os.path.join(BASE_DIR, "Library_Scan", "Processed_Reports")
-MEDIA_DIR = os.path.join(BASE_DIR, "media_storage")
-
-class CanonArchitect:
-    def __init__(self, output_dir):
-        self.output_dir = output_dir
-        self.book = epub.EpubBook()
-        self.spine = ['nav']
-        self.css = self._get_css()
-
-    def _get_css(self):
-        return """
-        body { font-family: 'Times New Roman', serif; }
-        h1 { border-bottom: 2px solid #333; text-align: center; }
-        h2 { background-color: #eee; padding: 5px; }
-        .entry { margin-bottom: 20px; border-left: 3px solid #ccc; padding-left: 10px; }
-        .meta { color: #666; font-style: italic; font-size: 0.9em; }
-        .timeline-item { margin-bottom: 10px; }
-        .date { font-weight: bold; }
-        img { max-width: 100%; border: 1px solid #333; }
-        .gallery-grid { display: flex; flex-wrap: wrap; }
-        """
-
-    def build_encyclopedia(self, series_name, nodes):
-        """
-        nodes: Dict of { node_id: node_data } from Knowledge Graph.
-        """
-        file_name = f"{series_name} [Canon Encyclopedia].epub"
-        out_path = os.path.join(self.output_dir, file_name)
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8"><title>Semantic Editor</title>
+    <style>
+        /* --- THEME --- */
+        body { margin: 0; background: #0d1117; color: #c9d1d9; font-family: 'Consolas', 'Monaco', monospace; height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
         
-        # 1. CHECK EXISTING
-        if os.path.exists(out_path):
-            print(f"[Prompt] Canon Source '{file_name}' exists.")
-            # In a GUI/Web context, we'd ask. In CLI, we assume 'Update/Rebuild'.
-            print("   > Rebuilding to include latest knowledge...")
+        /* --- TOOLBAR --- */
+        #toolbar { height: 32px; background: #161b22; border-bottom: 1px solid #30363d; display: flex; align-items: center; padding: 0 10px; gap: 10px; }
+        button { background: #21262d; border: 1px solid #30363d; color: #c9d1d9; padding: 4px 10px; border-radius: 4px; cursor: pointer; font-size: 12px; }
+        button:hover { background: #30363d; color: white; }
+        button.primary { background: #238636; border-color: #238636; color: white; }
 
-        # SETUP BOOK
-        self.book.set_identifier(str(uuid.uuid4()))
-        self.book.set_title(f"The {series_name} Encyclopedia")
-        self.book.set_language('en')
-        self.book.add_author("Librarian AI")
+        /* --- SPLIT VIEW --- */
+        #workspace { flex: 1; display: flex; overflow: hidden; }
         
-        # Add CSS
-        nav_css = epub.EpubItem(uid="style_nav", file_name="style/nav.css", media_type="text/css", content=self.css)
-        self.book.add_item(nav_css)
+        /* RAW EDITOR (Left) */
+        #raw-layer { width: 0; flex: 0; transition: 0.2s; border-right: 1px solid #30363d; display: flex; flex-direction: column; }
+        textarea { flex: 1; background: #0d1117; color: #c9d1d9; border: none; padding: 10px; resize: none; outline: none; white-space: pre; overflow: auto; font-family: inherit; font-size: 13px; line-height: 1.5; }
 
-        # 2. CATEGORIZE DATA
-        categories = {
-            "PEOPLE": [], "LOCATIONS": [], "THINGS": [], "EVENTS": [], "CONCEPTS": []
+        /* BLOCK EDITOR (Right) */
+        #block-layer { flex: 1; padding: 20px; overflow-y: auto; position: relative; }
+        
+        /* --- SEMANTIC BLOCKS --- */
+        .block { 
+            position: relative; margin-left: 20px; padding: 5px; 
+            border-left: 2px solid #30363d; border-radius: 4px;
+            transition: all 0.2s; background: rgba(255,255,255,0.02);
+            margin-bottom: 4px;
         }
         
-        # Visuals accumulator
-        visuals = collections.defaultdict(list) # { "Book Title": [img_path...] }
+        /* Dragging Styles */
+        .block.draggable { cursor: grab; }
+        .block.dragging { opacity: 0.5; border: 2px dashed #58a6ff; background: #1f2428; }
+        .block.drag-over { border-top: 2px solid #58a6ff; }
 
-        for nid, n in nodes.items():
-            # Sort into buckets
-            n_type = n.get('type', 'UNKNOWN')
-            
-            # Map Parser Types to Encyclopedia Sections
-            if "NARRATIVE" in n_type or "PERSON" in n.get('category', '').upper():
-                categories["PEOPLE"].append(n)
-            elif "LOCATION" in n.get('category', '').upper() or "SITE" in n_type:
-                categories["LOCATIONS"].append(n)
-            elif "TECHNICAL" in n_type or "ARTIFACT" in n.get('category', '').upper():
-                categories["THINGS"].append(n)
-            elif "EVENT" in n_type or n.get('timeline'):
-                categories["EVENTS"].append(n)
-            elif "RELIGIOUS" in n_type or "CONCEPT" in n_type:
-                categories["CONCEPTS"].append(n)
-            else:
-                # Default bucket based on name analysis?
-                categories["THINGS"].append(n)
-
-            # Collect Images
-            if n.get('images'):
-                # Find source book
-                src = n['sources'][0] if n['sources'] else "Unknown Source"
-                for img in n['images']:
-                    visuals[src].append((n['name'], img))
-
-        # 3. BUILD SECTIONS
-        toc_links = []
-
-        # --- A. ENTITY SECTIONS ---
-        for cat_name, items in categories.items():
-            if not items: continue
-            
-            # Sort A-Z
-            items.sort(key=lambda x: x['name'])
-            
-            # Create Section File
-            filename = f"sect_{cat_name.lower()}.xhtml"
-            content = f"<h1>{cat_name}</h1>"
-            
-            for item in items:
-                # Format Entry
-                first_seen = item['sources'][0] if item['sources'] else "Unknown"
-                desc = item.get('description', 'No detailed record.')
-                
-                content += f"""
-                <div class="entry">
-                    <h3>{item['name']}</h3>
-                    <div class="meta">First Mentioned: {first_seen}</div>
-                    <p>{desc}</p>
-                """
-                
-                # Tech Specs
-                if item.get('specs'):
-                    content += "<ul>" + "".join([f"<li>{s}</li>" for s in item['specs']]) + "</ul>"
-                
-                # Timeline References (Personal History)
-                if item.get('timeline'):
-                    content += "<h4>History</h4><ul>"
-                    for t in item['timeline'][:5]: # Limit to top 5 to save space
-                        content += f"<li><b>{t.get('date','?')}</b>: {t.get('action','')}</li>"
-                    content += "</ul>"
-                
-                content += "</div><hr/>"
-
-            # Add to Book
-            chap = epub.EpubHtml(title=cat_name.title(), file_name=filename, content=content)
-            chap.add_item(nav_css)
-            self.book.add_item(chap)
-            self.spine.append(chap)
-            toc_links.append(chap)
-
-        # --- B. MASTER TIMELINE ---
-        # Aggregate all timelines from all nodes
-        all_events = []
-        for n in nodes.values():
-            for t in n.get('timeline', []):
-                # Try to parse date
-                d_str = t.get('date', 'Unknown')
-                # Simple sort key (try to find year)
-                import re
-                year_match = re.search(r'\d{4}', str(d_str))
-                year = float(year_match.group()) if year_match else 99999
-                
-                all_events.append({
-                    "year": year,
-                    "date_str": d_str,
-                    "action": t.get('action', ''),
-                    "entity": n['name'],
-                    "snippet": t.get('snippet', '')
-                })
+        /* Semantic Colors (From your Python snippet) */
+        .type-class    { border-color: #d2a8ff; background: rgba(210, 168, 255, 0.05); } /* Purple */
+        .type-function { border-color: #58a6ff; background: rgba(88, 166, 255, 0.05); } /* Blue */
+        .type-subblock { border-color: #7ee787; background: rgba(126, 231, 135, 0.05); } /* Green */
+        .type-comment  { border-color: #484f58; color: #8b949e; font-style: italic; }
+        .type-import   { border-color: #8b949e; opacity: 0.8; }
         
-        all_events.sort(key=lambda x: x['year'])
+        /* Header Row */
+        .block-head { display: flex; align-items: center; gap: 8px; padding: 2px 5px; border-radius: 4px; }
+        .block-head:hover { background: rgba(255,255,255,0.05); }
         
-        if all_events:
-            t_content = "<h1>Chronological History</h1>"
-            for e in all_events:
-                if e['year'] != 99999:
-                    t_content += f"""
-                    <div class="timeline-item">
-                        <span class="date">{e['date_str']}</span> - 
-                        <b>{e['entity']}</b>: {e['action']}
-                        <br/><small>{e['snippet']}</small>
-                    </div>
-                    """
-            
-            time_chap = epub.EpubHtml(title="Timeline", file_name="timeline.xhtml", content=t_content)
-            time_chap.add_item(nav_css)
-            self.book.add_item(time_chap)
-            self.spine.append(time_chap)
-            toc_links.append(time_chap)
+        .toggle-btn { cursor: pointer; width: 12px; height: 12px; display: flex; align-items: center; justify-content: center; font-size: 10px; color: #8b949e; }
+        .block-name { font-weight: bold; color: inherit; flex: 1; }
+        .block-type { font-size: 10px; opacity: 0.5; text-transform: uppercase; }
 
-        # --- C. VISUAL GLOSSARY ---
-        if visuals:
-            g_content = "<h1>Visual Glossary</h1>"
-            for book_title, imgs in visuals.items():
-                g_content += f"<h2>From: {book_title}</h2>"
-                for entity_name, img_rel_path in imgs:
-                    # We need to embed the image file into the EPUB
-                    # Image path is likely 'media_storage/filename.jpg'
-                    real_path = os.path.join(BASE_DIR, img_rel_path.strip("/"))
+        /* Collapsed State */
+        .block.collapsed .block-body { display: none; }
+        .block.collapsed::after { content: '...'; opacity: 0.5; margin-left: 10px; }
+
+        /* Editable Lines */
+        .code-line { padding: 0 5px; border-radius: 2px; cursor: text; min-height: 18px; }
+        .code-line:hover { background: rgba(255,255,255,0.05); }
+        .code-line:focus { background: #161b22; outline: none; color: white; }
+    </style>
+</head>
+<body>
+
+    <div id="toolbar">
+        <span style="font-weight:bold; color:#58a6ff;">📦 Semantic Editor</span>
+        <div style="flex:1"></div>
+        <button onclick="Editor.toggleRaw()" title="Toggle Raw Text View">📝 Split View</button>
+        <button onclick="Editor.save()" class="primary">💾 Save</button>
+    </div>
+
+    <div id="workspace">
+        <div id="raw-layer">
+            <textarea id="raw-input" spellcheck="false" oninput="Editor.parseFromRaw()"></textarea>
+        </div>
+        <div id="block-layer"></div>
+    </div>
+
+    <script>
+        // --- 1. THE BLOCK TREE LOGIC (Ported from your Python) ---
+        
+        const COLOR = {
+            "class": "type-class",
+            "function": "type-function",
+            "subblock": "type-subblock",
+            "import": "type-import",
+            "comment": "type-comment",
+            "code": "type-code"
+        };
+
+        class Block {
+            constructor(type, name, indent, lineStr) {
+                this.type = type;
+                this.name = name;
+                this.indent = indent;
+                this.lines = lineStr ? [lineStr] : [];
+                this.children = [];
+                this.collapsed = false;
+                this.id = Math.random().toString(36).substr(2, 9); // Unique ID for DragDrop
+            }
+        }
+
+        const Parser = {
+            parse(text) {
+                const lines = text.split('\n');
+                const root = new Block("root", "ROOT", -4, "");
+                const stack = [root];
+
+                lines.forEach(line => {
+                    if(!line.trim()) {
+                         // Attach empty lines to current leaf
+                         stack[stack.length-1].lines.push(line);
+                         return;
+                    }
+
+                    const indent = line.search(/\S|$/);
+                    const stripped = line.trim();
                     
-                    if os.path.exists(real_path):
-                        img_name = os.path.basename(real_path)
-                        try:
-                            # Read image binary
-                            with open(real_path, 'rb') as f: img_data = f.read()
-                            
-                            # Create EpubImageItem
-                            epub_img = epub.EpubItem(
-                                uid=img_name, 
-                                file_name=f"images/{img_name}", 
-                                media_type="image/jpeg", 
-                                content=img_data
-                            )
-                            self.book.add_item(epub_img)
-                            
-                            # Add to HTML
-                            g_content += f"""
-                            <div style="text-align:center; margin-bottom:20px;">
-                                <img src="images/{img_name}" style="max-height:300px;"/><br/>
-                                <b>{entity_name}</b>
-                            </div>
-                            """
-                        except: pass
-            
-            gal_chap = epub.EpubHtml(title="Visual Glossary", file_name="gallery.xhtml", content=g_content)
-            gal_chap.add_item(nav_css)
-            self.book.add_item(gal_chap)
-            self.spine.append(gal_chap)
-            toc_links.append(gal_chap)
+                    // Logic: Find parent with strictly LESS indent
+                    while(stack.length > 1 && stack[stack.length-1].indent >= indent) {
+                        stack.pop();
+                    }
+                    const parent = stack[stack.length-1];
 
-        # FINALIZE
-        self.book.toc = toc_links
-        self.book.add_item(epub.EpubNcx())
-        self.book.add_item(epub.EpubNav())
-        self.book.spine = self.spine
-        
-        epub.write_epub(out_path, self.book, {})
-        print(f"[Canon] Encyclopedia built: {out_path}")
-        return out_path
+                    // Identify Block Type
+                    let type = "code";
+                    let name = "";
+                    
+                    if(stripped.startsWith("class ")) { type = "class"; name = stripped.split(' ')[1].replace(':',''); }
+                    else if(stripped.startsWith("def ")) { type = "function"; name = stripped.split(' ')[1].split('(')[0]; }
+                    else if(stripped.startsWith("#")) { type = "comment"; name = stripped; }
+                    else if(stripped.startsWith("import ") || stripped.startsWith("from ")) { type = "import"; name = "import"; }
+                    else if(stripped.endsWith(":")) { type = "subblock"; name = stripped.replace(':',''); }
+                    
+                    // Decide: Is this a new structural block or just a line of code?
+                    // Structure blocks are classes, functions, or anything that increases indent level
+                    if (["class", "function", "subblock"].includes(type)) {
+                        const newBlock = new Block(type, name, indent, line);
+                        parent.children.push(newBlock);
+                        stack.push(newBlock);
+                    } else {
+                        // Just append line to current block
+                        // OR if indent matches parent indent, maybe it belongs to parent?
+                        // For simplicity in this v1, code lines live in the block they are inside
+                        // We check if we need to create a "code chunk" or append to last child
+                        const last = parent.children[parent.children.length-1];
+                        if(last && last.type === 'code' && last.indent === indent) {
+                            last.lines.push(line);
+                        } else {
+                            // New generic code block
+                            const codeBlock = new Block("code", "...", indent, line);
+                            parent.children.push(codeBlock);
+                        }
+                    }
+                });
 
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
-    parser.add_argument("series", help="Name of series to build canon for")
-    args = parser.parse_args()
-    
-    # LOAD DATA
-    print(f"[Canon] Loading Knowledge Graph for {args.series}...")
-    
-    # Strategy: Load ALL available knowledge graphs, then filter by Series
-    # Since Knowledge Graphs might be per-book, we aggregate.
-    
-    aggregated_nodes = {}
-    
-    # 1. Scan Metadata to find books in this series
-    target_files = []
-    for root, dirs, files in os.walk(os.path.join(BASE_DIR, "Library_Scan")):
-        for f in files:
-            if f.endswith(".meta.json"):
-                try:
-                    with open(os.path.join(root, f), 'r', encoding='utf-8') as jf:
-                        meta = json.load(jf)
-                        if meta.get('series') and args.series.lower() in meta['series'].lower():
-                            # This book is in series. Look for its graph.
-                            # Graph is usually named Title_knowledge_graph.json in Processed_Reports
-                            title = meta.get('title', 'Unknown')
-                            graph_path = os.path.join(REPORT_DIR, f"{title}_knowledge_graph.json")
-                            if os.path.exists(graph_path):
-                                target_files.append(graph_path)
-                except: pass
+                return root;
+            },
 
-    # 2. Merge Graphs
-    for p in target_files:
-        try:
-            with open(p, 'r', encoding='utf-8') as jf:
-                data = json.load(jf)
-                nodes = data.get("nodes", {})
-                for nid, n in nodes.items():
-                    if nid not in aggregated_nodes:
-                        aggregated_nodes[nid] = n
-                    else:
-                        # Merge logic (append timelines, sources)
-                        aggregated_nodes[nid]['sources'].extend(n['sources'])
-                        if 'timeline' in n:
-                            aggregated_nodes[nid].setdefault('timeline', []).extend(n['timeline'])
-        except: pass
+            renderToText(block) {
+                let out = "";
+                block.children.forEach(child => {
+                    child.lines.forEach(l => out += l + "\n");
+                    out += this.renderToText(child);
+                });
+                return out;
+            }
+        };
 
-    if not aggregated_nodes:
-        print("[Error] No knowledge data found for this series.")
-    else:
-        builder = CanonArchitect(REPORT_DIR)
-        builder.build_encyclopedia(args.series, aggregated_nodes)
+        // --- 2. THE UI RENDERER ---
+
+        const Editor = {
+            root: null,
+            dragSrc: null,
+
+            init() {
+                // Initial Demo Code
+                const demo = [
+                    "import sys",
+                    "# This is a semantic editor",
+                    "",
+                    "class Hero:",
+                    "    def __init__(self, name):",
+                    "        self.name = name",
+                    "        self.power = 100",
+                    "",
+                    "    def fly(self):",
+                    "        print(self.name + ' is flying')",
+                    "        if self.power > 0:",
+                    "            self.power -= 10"
+                ].join('\n');
+                
+                document.getElementById('raw-input').value = demo;
+                this.parseFromRaw();
+            },
+
+            toggleRaw() {
+                const el = document.getElementById('raw-layer');
+                el.style.width = el.style.width === '50%' ? '0' : '50%';
+                el.style.flex = el.style.flex === '1' ? '0' : '1';
+            },
+
+            parseFromRaw() {
+                const text = document.getElementById('raw-input').value;
+                this.root = Parser.parse(text);
+                this.renderTree();
+            },
+
+            renderTree() {
+                const container = document.getElementById('block-layer');
+                container.innerHTML = '';
+                // Skip root, render children
+                this.root.children.forEach(child => {
+                    container.appendChild(this.createBlockElement(child));
+                });
+            },
+
+            createBlockElement(block) {
+                const el = document.createElement('div');
+                el.className = `block ${COLOR[block.type] || ''}`;
+                if(block.collapsed) el.classList.add('collapsed');
+                el.draggable = true;
+
+                // Drag Events
+                el.addEventListener('dragstart', e => { 
+                    this.dragSrc = block; 
+                    e.dataTransfer.effectAllowed = 'move';
+                    el.classList.add('dragging');
+                    e.stopPropagation(); // Don't drag parent
+                });
+                el.addEventListener('dragend', () => el.classList.remove('dragging'));
+                el.addEventListener('dragover', e => { e.preventDefault(); el.classList.add('drag-over'); return false; });
+                el.addEventListener('dragleave', () => el.classList.remove('drag-over'));
+                el.addEventListener('drop', e => {
+                    e.stopPropagation();
+                    el.classList.remove('drag-over');
+                    this.handleDrop(block);
+                });
+
+                // Header
+                const head = document.createElement('div');
+                head.className = 'block-head';
+                
+                // Toggle
+                const tog = document.createElement('span');
+                tog.className = 'toggle-btn';
+                tog.innerHTML = block.collapsed ? '▶' : '▼';
+                if(block.children.length === 0) tog.innerHTML = '•';
+                tog.onclick = () => { block.collapsed = !block.collapsed; this.renderTree(); };
+
+                // Name/Code
+                const title = document.createElement('span');
+                title.className = 'block-name';
+                title.innerText = block.name || block.lines[0].trim();
+                
+                // If it's just code, make it editable text
+                if(block.type === 'code' || block.type === 'import') {
+                    title.contentEditable = true;
+                    title.className = 'code-line';
+                    title.innerText = block.lines.join('\n');
+                    title.oninput = (e) => { block.lines = e.target.innerText.split('\n'); this.syncToRaw(); };
+                    // Disable header styling for raw code
+                    el.style.borderLeft = 'none';
+                    el.style.padding = '0';
+                    head.style.display = 'none'; // Hide header for pure code
+                    el.appendChild(title);
+                } else {
+                    head.appendChild(tog);
+                    head.appendChild(title);
+                    
+                    const meta = document.createElement('span');
+                    meta.className = 'block-type';
+                    meta.innerText = block.type;
+                    head.appendChild(meta);
+                    el.appendChild(head);
+                }
+
+                // Children Container
+                const body = document.createElement('div');
+                body.className = 'block-body';
+                
+                // If a structural block has lines of its own definition (like 'def foo():')
+                // We rendered that in the header.
+                // Now render children
+                block.children.forEach(child => {
+                    body.appendChild(this.createBlockElement(child));
+                });
+                el.appendChild(body);
+
+                return el;
+            },
+
+            handleDrop(targetBlock) {
+                if(this.dragSrc === targetBlock) return;
+                
+                // Simple Logic: Move Src to be a child of Target
+                // 1. Remove from old parent
+                this.removeFromTree(this.root, this.dragSrc);
+                
+                // 2. Add to new target
+                targetBlock.children.push(this.dragSrc);
+                
+                // 3. Re-indent logic would go here (update indentation of src based on target)
+                this.recalcIndent(this.dragSrc, targetBlock.indent + 4);
+
+                this.syncToRaw();
+                this.renderTree();
+            },
+
+            removeFromTree(parent, target) {
+                const idx = parent.children.indexOf(target);
+                if(idx > -1) {
+                    parent.children.splice(idx, 1);
+                    return true;
+                }
+                for(let c of parent.children) {
+                    if(this.removeFromTree(c, target)) return true;
+                }
+                return false;
+            },
+
+            recalcIndent(block, newIndent) {
+                // Calculate delta
+                const oldIndent = block.lines[0].search(/\S|$/);
+                const delta = newIndent - oldIndent;
+
+                // Apply to self
+                block.lines = block.lines.map(l => {
+                    const content = l.trimStart();
+                    return " ".repeat(newIndent) + content;
+                });
+                block.indent = newIndent;
+
+                // Apply to children recursively
+                block.children.forEach(c => this.recalcIndent(c, newIndent + 4));
+            },
+
+            syncToRaw() {
+                const text = Parser.renderToText(this.root);
+                document.getElementById('raw-input').value = text;
+            },
+
+            async save() {
+                const content = document.getElementById('raw-input').value;
+                const urlParams = new URLSearchParams(window.location.search);
+                const path = urlParams.get('file'); // ?file=tools/test.py
+                
+                if(path) {
+                    await fetch('/io/save', {
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({path, content})
+                    });
+                    alert('Saved!');
+                } else {
+                    alert('No file path specified. (Open with ?file=...)');
+                }
+            }
+        };
+
+        // Boot
+        // Check if file provided in URL
+        const p = new URLSearchParams(window.location.search);
+        const f = p.get('file');
+        if(f) {
+            fetch('/io/read', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({path:f})})
+            .then(r=>r.json()).then(d => {
+                if(d.status === 'success') {
+                    document.getElementById('raw-input').value = d.content;
+                    Editor.parseFromRaw();
+                }
+            });
+        } else {
+            Editor.init();
+        }
+
+    </script>
+</body>
+</html>
